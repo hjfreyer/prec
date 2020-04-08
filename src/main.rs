@@ -6,132 +6,227 @@
 //     Comp(&'a Fn<'a>, Vec<Fn<'a>>),
 //     Rec(&'a Fn<'a>, &'a Fn<'a>),
 // }
+#![feature(box_syntax, box_patterns, label_break_value, bindings_after_at)]
+#![allow(dead_code)]
+
 use im::Vector;
+use std::collections::HashMap;
+
 use std::fmt;
-use std::rc::Rc;
+//use std::rc::Rc;
 
 //use typed_arena::Arena;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum FnEnum {
-    Z(usize),
-    S,
-    Proj(usize, usize),
-    Comp(Fn, Vector<Fn>),
-    Rec(Fn, Fn),
-
-    Alias(&'static str, Fn),
-    Int(i32, usize),
-}
-
-//type Fn = Rc<FnEnum>;
 #[derive(Clone, PartialEq, Eq)]
-pub struct Fn(Rc<FnEnum>);
-
-impl Fn {
-    pub fn z(arity: usize) -> Fn {
-        Fn(Rc::new(FnEnum::Z(arity)))
-    }
-    pub fn s() -> Fn {
-        Fn(Rc::new(FnEnum::S))
-    }
-    pub fn proj(selector: usize, arity: usize) -> Fn {
-        Fn(Rc::new(FnEnum::Proj(selector, arity)))
-    }
-    pub fn comp(f: Fn, gs: im::Vector<Fn>) -> Fn {
-        Fn(Rc::new(FnEnum::Comp(f, gs)))
-    }
-    pub fn rec(f: Fn, g: Fn) -> Fn {
-        Fn(Rc::new(FnEnum::Rec(f, g)))
-    }
-    pub fn alias(name: &'static str, f: Fn) -> Fn {
-        Fn(Rc::new(FnEnum::Alias(name, f)))
-    }
-    pub fn int(value: i32, arity: usize) -> Fn {
-        Fn(Rc::new(FnEnum::Int(value, arity)))
-    }
+struct FnMeta {
+    alias: Option<&'static str>,
+    int: Option<i32>,
 }
 
-impl fmt::Debug for Fn {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &*self.0 {
-            FnEnum::Z(a) => f.write_fmt(format_args!("Z_{}", a)),
-            //            FnEnum::Z(_) => f.write_str("Z"),
-            FnEnum::S => f.write_str("S"),
-            FnEnum::Proj(select, _) => f.write_fmt(format_args!("P[{}]", select)),
-            FnEnum::Rec(fr, g) => f.write_fmt(format_args!("Rec[{:?}, {:?}]", fr, g)),
-            FnEnum::Comp(fun, gs) => {
-                f.write_str("(")?;
-
-                f.write_fmt(format_args!("{:?}", fun))?;
-                for g in gs {
-                    f.write_str(" ")?;
-                    f.write_fmt(format_args!("{:?}", g))?;
-                }
-
-                f.write_str(")")
-            }
-            FnEnum::Alias(name, _) => f.write_str(name),
-            FnEnum::Int(value, arity) => f.write_fmt(format_args!("(int {} {})", value, arity)),
-        }
-    }
+impl FnMeta {
+    const NONE: FnMeta = FnMeta {
+        alias: None,
+        int: None,
+    };
 }
 
-// struct Arena<'a> {
-//     fns: Vec<Fn<'a>>
+#[derive(Clone, PartialEq, Eq)]
+enum Fn {
+    Z(FnMeta),
+    S(FnMeta),
+    Proj(usize, usize, FnMeta),
+    Comp(Box<Fn>, usize, Vector<Box<Fn>>, FnMeta),
+    Rec(Box<Fn>, Box<Fn>, FnMeta),
+}
+
+// #[derive(Clone, PartialEq, Eq)]
+// enum Fn2 {
+//     Z,
+//     S,
+//     Proj(usize, usize),
+//     Comp(Box<Fn2>, usize, Vector<Box<Fn2>>),
+//     Rec(Box<Fn2>, Box<Fn2>),
+
+//     Alias(&'static str, Box<Fn2>),
+//     Int(i32),
 // }
 
-// impl<'a> Arena<'a> {
-//     fn take(&mut self, f: Fn<'a>) {
-//         self.fns.push(f)
-//     }
+// fn compile(func: Fn2) -> Fn {
+//     match func {
+//         Fn2::Z => Fn::Z(FnMeta::NONE),
+//         Fn2::S => Fn::S(FnMeta::NONE),
+//         Fn2::Proj(select, arity) => Fn::Proj(select, arity, FnMeta::NONE),
+//         Fn2::Comp(box f, g_arity, gs) => Fn::Comp(box compile(f), g_arity,
+//             gs.into_iter().map(|box g| box compile(g)).collect(), FnMeta::NONE),
+// Fn2::Rec(box f, box g) => Fn::Rec(box compile(f), box compile(g), FnMeta::NONE),
 
-//     fn z(&mut self, arity: usize)-> &'a Fn<'a> {
-//         self.fns.push(Fn::Z(arity));
-//         return &self.fns[self.fns.len() - 1]
+//         Fn2::Alias(name, box f) => set_meta(compile(f), FnMeta {alias: Some(name), int: None})
+//         Fn2::Int(value) => set_meta(compile(f), FnMeta {alias: Some(name), int: None})
 //     }
 // }
+
+fn set_meta(func: Fn, meta: FnMeta) -> Fn {
+    match func {
+        Fn::Z(_) => Fn::Z(meta),
+        Fn::S(_) => Fn::S(meta),
+        Fn::Proj(select, arity, _) => Fn::Proj(select, arity, meta),
+        Fn::Comp(f, g_arity, gs, _) => Fn::Comp(f, g_arity, gs, meta),
+        Fn::Rec(f, g, _) => Fn::Rec(f, g, meta),
+    }
+}
+// //type Fn = Rc<Fn>;
+// // #[derive(Clone, PartialEq, Eq)]
+// // pub struct Fn(Rc<Fn>);
 
 #[derive(Debug)]
 enum BadFn {
     Bad,
 }
 
-fn arity(Fn(f): &Fn) -> Result<usize, BadFn> {
-    match &**f {
-        &FnEnum::Z(n) => Ok(n),
-        &FnEnum::S => Ok(1),
-        &FnEnum::Proj(idx, of) => {
-            if idx < of {
-                Ok(of)
+fn arity(f: &Fn) -> Result<usize, BadFn> {
+    match f {
+        Fn::Z(_) => Ok(0),
+        Fn::S(_) => Ok(1),
+        &Fn::Proj(select, arity, _) => {
+            if select < arity {
+                Ok(arity)
             } else {
                 Err(BadFn::Bad)
             }
         }
-        FnEnum::Comp(f, gs) => {
-            if arity(f)? != gs.len() || gs.len() == 0 {
+        Fn::Comp(box f, g_arity, gs, _) => {
+            if arity(&f)? != gs.len() {
                 Err(BadFn::Bad)
+            } else if gs.len() == 0 {
+                Ok(*g_arity)
             } else {
-                let first_arity = arity(&gs[0])?;
                 for g in gs {
-                    if arity(g)? != first_arity {
+                    if arity(&*g)? != *g_arity {
                         return Err(BadFn::Bad);
                     }
                 }
-                Ok(first_arity)
+                Ok(*g_arity)
             }
         }
-        FnEnum::Rec(f, g) => {
-            let f_arity = arity(f)?;
-            if f_arity + 2 != arity(g)? {
+        Fn::Rec(f, g, _) => {
+            let f_arity = arity(&*f)?;
+            if f_arity + 2 != arity(&*g)? {
                 Err(BadFn::Bad)
             } else {
                 Ok(f_arity + 1)
             }
         }
-        FnEnum::Alias(_, f) => arity(f),
-        &FnEnum::Int(_, arity) => Ok(arity),
     }
+}
+
+impl Fn {
+    pub fn z() -> Fn {
+        Fn::Z(FnMeta::NONE)
+    }
+    pub fn s() -> Fn {
+        Fn::S(FnMeta::NONE)
+    }
+    pub fn proj(selector: usize, arity: usize) -> Fn {
+        Fn::Proj(selector, arity, FnMeta::NONE)
+    }
+    // Panics if gs is empty.
+    pub fn comp(f: Fn, gs: im::Vector<Box<Fn>>) -> Fn {
+        let head = gs.head().unwrap();
+
+        Fn::Comp(box f, arity(head).unwrap(), gs, FnMeta::NONE)
+    }
+    pub fn mk_const(arity: usize, f: Fn) -> Fn {
+        Fn::Comp(box f, arity, im::vector![], FnMeta::NONE)
+    }
+    pub fn rec(f: Fn, g: Fn) -> Fn {
+        Fn::Rec(box f, box g, FnMeta::NONE)
+    }
+    pub fn alias(name: &'static str, f: Fn) -> Fn {
+        set_meta(
+            f,
+            FnMeta {
+                alias: Some(name),
+                int: None,
+            },
+        )
+    }
+    pub fn int(value: i32) -> Fn {
+        intf(value)
+    }
+}
+
+impl fmt::Debug for Fn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fn meta_or<F>(f: &mut fmt::Formatter<'_>, meta: &FnMeta, els: F) -> fmt::Result
+        where
+            F: FnOnce(&mut fmt::Formatter<'_>) -> fmt::Result,
+        {
+            match meta {
+                FnMeta {
+                    alias: Some(name),
+                    int: _,
+                } => f.write_str(name),
+                FnMeta {
+                    alias: None,
+                    int: Some(value),
+                } => f.write_fmt(format_args!("{}", value)),
+                FnMeta {
+                    alias: None,
+                    int: None,
+                } => els(f),
+            }
+        }
+        match &self {
+            Fn::Z(meta) => meta_or(f, meta, |f| f.write_str("Z")),
+            Fn::S(meta) => meta_or(f, meta, |f| f.write_str("S")),
+            Fn::Proj(select, _, meta) => {
+                meta_or(f, meta, |f| f.write_fmt(format_args!("P[{}]", select)))
+            }
+            Fn::Rec(fr, g, meta) => meta_or(f, meta, |f| {
+                f.write_fmt(format_args!("Rec[{:?}, {:?}]", fr, g))
+            }),
+            Fn::Comp(box fun, arity, gs, meta) => meta_or(f, meta, |f| {
+                if gs.is_empty() {
+                    f.write_fmt(format_args!("(const {} {:?})", arity, fun))
+                } else {
+                    f.write_str("(")?;
+
+                    f.write_fmt(format_args!("{:?}", fun))?;
+                    for g in gs {
+                        f.write_str(" ")?;
+                        f.write_fmt(format_args!("{:?}", g))?;
+                    }
+
+                    f.write_str(")")
+                }
+            }),
+        }
+    }
+}
+
+macro_rules! prec {
+    (@fn Z) => {Fn::z()};
+    (@fn S) => {Fn::s()};
+    (@fn (int $value:tt)) => {intf($value)};
+    (@fn (rec $f:tt $g:tt)) => {
+        Fn::rec(prec![@fn $f], prec![@fn $g])
+    };
+    (@fn (raw $v:expr)) => {$v};
+    (@fn (proj $select:tt $arity:tt)) => {
+        Fn::proj($select, $arity)
+    };
+    (@fn (const $arity:tt $f:tt)) => {
+        Fn::mk_const($arity, prec![@fn $f])
+    };
+    (@fn ($f:tt $($gs:tt)+)) => {
+        Fn::comp(prec![@fn $f], vec![$(box prec![@fn $gs]),+].into())
+    };
+    (@fn $f:ident) => {$f.clone()};
+    ($(let $name:ident = $fun:tt;)*) => {
+        $(
+            let $name = Fn::alias(stringify!($name), prec!(@fn $fun));
+        )*
+    };
 }
 
 #[derive(Debug)]
@@ -140,30 +235,6 @@ enum Reduction {
     AlreadyReduced(Fn),
 }
 
-// macro_rules! reduction_rule {
-//     ((Z $arity:ident)) => {Fn::z($arity)};
-//     (@fn S) => {Fn::s()};
-//     (@fn (int $value:tt $arity:tt)) => {Fn::int($value, $arity)};
-//     (@fn (true $arity:tt)) => {Fn::int(1, $arity)};
-//     (@fn (false $arity:tt)) => {Fn::int(0, $arity)};
-//     (@fn (rec $f:tt $g:tt)) => {
-//         Fn::rec(prec![@fn $f], prec![@fn $g])
-//     };
-//     (@fn (raw $v:expr)) => {$v};
-//     (@fn (proj $select:tt $arity:tt)) => {
-//         Fn::proj($select, $arity)
-//     };
-//     (@fn ($f:tt $($gs:tt)+)) => {
-//         Fn::comp(prec![@fn $f], vec![$(prec![@fn $gs]),+].into())
-//     };
-//     (@fn $f:ident) => {$f};
-//     ($(let $name:ident = $fun:tt;)*) => {
-//         $(
-//             let $name = Fn::alias(stringify!($name), prec!(@fn $fun));
-//         )*
-//     };
-// }
-
 fn reduce_fully(f: &Fn) -> Result<Fn, BadFn> {
     let mut expr = f.clone();
     println!("{:?}", expr);
@@ -171,7 +242,6 @@ fn reduce_fully(f: &Fn) -> Result<Fn, BadFn> {
         expr = nx;
         println!("{:?}", expr);
     }
-    expr = resolve_fully(&expr)?;
     println!("reduced: {:?}", expr);
     Ok(expr)
 }
@@ -194,6 +264,9 @@ fn reduce_with_preference(func: &Fn) -> Result<Option<Fn>, BadFn> {
     if let Some(r) = reduce_comp_distribute(func)? {
         return Ok(Some(r));
     }
+    if let Some(r) = reduce_const_undistribute(func)? {
+        return Ok(Some(r));
+    }
     if let Some(r) = reduce_rec_zero(func)? {
         return Ok(Some(r));
     }
@@ -203,188 +276,107 @@ fn reduce_with_preference(func: &Fn) -> Result<Option<Fn>, BadFn> {
     if let Some(r) = reduce_rec_succ2(func)? {
         return Ok(Some(r));
     }
+    if let Some(r) = reduce_const_elim(func)? {
+        return Ok(Some(r));
+    }
 
-    if let FnEnum::Comp(f, gs) = &*func.0 {
+    if let Fn::Comp(box f, g_arity, gs, _) = func {
         if let Some(r) = reduce_with_preference(f)? {
-            return Ok(Some(Fn::comp(r, gs.clone())));
+            return Ok(Some(Fn::Comp(box r, *g_arity, gs.clone(), FnMeta::NONE)));
         }
 
         let mut i = gs.iter();
         let mut new_g = im::vector![];
         let mut any_reduced = false;
-        while let Some(g) = i.next() {
+        while let Some(box g) = i.next() {
             if let Some(r) = reduce_with_preference(g)? {
-                new_g.push_back(r);
+                new_g.push_back(box r);
                 any_reduced = true;
             } else {
-                new_g.push_back(g.clone())
+                new_g.push_back(box g.clone())
             }
         }
         if any_reduced {
             while let Some(g) = i.next() {
                 new_g.push_back(g.clone())
             }
-            return Ok(Some(Fn::comp(f.clone(), new_g)));
+            return Ok(Some(Fn::Comp(box f.clone(), *g_arity, new_g, FnMeta::NONE)));
         }
     }
 
     Ok(None)
 }
 
-// match &*f.0 {
-//     &FnEnum::Z(_) | &FnEnum::S | &FnEnum::Proj(_, _) | &FnEnum::Rec(_, _) => {
-//         Ok(Reduction::AlreadyReduced(f.clone()))
-//     }
-//     FnEnum::Alias(_, fun) => return Ok(Reduction::Redux(fun.clone())),
-//     &FnEnum::Int(value, arity) => {
-//         if value == 0 {
-//             Ok(Reduction::Redux(Fn::z(arity)))
-//         } else {
-//             Ok(Reduction::Redux(Fn::comp(
-//                 Fn::s(),
-//                 im::vector![Fn::int(value - 1, arity)],
-//             )))
-//         }
-//     }
-//     FnEnum::Comp(cf, cgs) => {
-//         match &*cf.0 {
-//             &FnEnum::Z(_) => {
-//                 let new_arity = arity(&cgs[0])?;
-//                 return Ok(Reduction::Redux(Fn::z(new_arity)));
-//             }
-//             &FnEnum::S => (),
-//             &FnEnum::Proj(select, _) => return Ok(Reduction::Redux(cgs[select].clone())),
-//             FnEnum::Alias(_, _) => (),
-//             FnEnum::Int(_, _) => (),
-
-//             FnEnum::Comp(int_f, int_gs) => {
-//                 let new_gs = int_gs
-//                     .iter()
-//                     .map(|g| Fn::comp(g.clone(), cgs.clone()))
-//                     .collect();
-//                 return Ok(Reduction::Redux(Fn::comp(int_f.clone(), new_gs)));
-//             }
-
-//             // Handled below.
-//             FnEnum::Rec(_, _) => {}
-//         };
-
-//         if let Reduction::Redux(redux) = reduce(&cf)? {
-//             return Ok(Reduction::Redux(Fn::comp(redux, cgs.clone())));
-//         }
-
-//         let mut any_reduced = false;
-//         let mut ngs = vec![];
-//         for g in cgs.iter().map(reduce) {
-//             match g? {
-//                 Reduction::Redux(redux) => {
-//                     any_reduced = true;
-//                     ngs.push(redux);
-//                 }
-//                 Reduction::AlreadyReduced(orig) => {
-//                     ngs.push(orig);
-//                 }
-//             }
-//         }
-//         if any_reduced {
-//             return Ok(Reduction::Redux(Fn::comp(cf.clone(), ngs.into())));
-//         }
-
-//         //
-//         Ok(Reduction::AlreadyReduced(f.clone()))
-//     }
-// }
-
-// fn get_redex(f: &Fn) -> Result<Vec<Fn>, BadFn> {
-// let mut ranked : Vec<(i32, f)>= vec![];
-
-// fn rec(f: &Fn) {
-
-// }
-//     //
-// }
-fn resolve(func: &Fn) -> Result<Fn, BadFn> {
-    match &*func.0 {
-        FnEnum::Alias(_, f) => resolve(f),
-        &FnEnum::Int(value, arity) => {
-            if value == 0 {
-                Ok(Fn::z(arity))
-            } else {
-                Ok(Fn::comp(Fn::s(), im::vector![Fn::int(value - 1, arity)]))
-            }
-        }
-
-        FnEnum::Z(_) | FnEnum::S | FnEnum::Proj(_, _) | FnEnum::Rec(_, _) | FnEnum::Comp(_, _) => {
-            Ok(func.clone())
-        }
-    }
-}
-
-fn resolve_fully(func: &Fn) -> Result<Fn, BadFn> {
-    match &*func.0 {
-        FnEnum::Alias(_, f) => resolve_fully(f),
-        &FnEnum::Int(value, arity) => Ok(intf(value, arity)),
-        FnEnum::Rec(f, g) => Ok(Fn::rec(resolve_fully(f)?, resolve_fully(g)?)),
-
-        FnEnum::Comp(f, gs) => {
-            let new_gs: Result<im::Vector<Fn>, BadFn> = gs.iter().map(resolve_fully).collect();
-            Ok(Fn::comp(resolve_fully(&f)?, new_gs?))
-        }
-        FnEnum::Z(_) | FnEnum::S | FnEnum::Proj(_, _) => Ok(func.clone()),
-    }
-}
-
-// fn reduce_int(func: &Fn) -> Result<Option<Fn>, BadFn> {
-//     if let &FnEnum::Int(value, arity) = &*func.0 {
-//         if 0 < value {
-//             Ok(Some(Fn::comp(
-//                 Fn::s(),
-//                 im::vector![Fn::int(value - 1, arity)],
-//             )))
-//         } else {
-//             Ok(Some(Fn::z(arity)))
-//         }
-//     } else {
-//         Ok(None)
-//     }
-// }
-
-// fn reduce_alias(func: &Fn) -> Result<Option<Fn>, BadFn> {
-//     if let FnEnum::Alias(name, func) = &*func.0 {
-//         Ok(Some(func.clone()))
-//     } else {
-//         Ok(None)
-//     }
-// }
-
 fn reduce_z_elim(func: &Fn) -> Result<Option<Fn>, BadFn> {
-    if let FnEnum::Comp(f, gs) = &*resolve(func)?.0 {
-        if let FnEnum::Z(_) = &*resolve(f)?.0 {
-            let any_arg = gs.head().ok_or(BadFn::Bad)?;
-            return Ok(Some(Fn::z(arity(any_arg)?)));
-        }
+    if let Fn::Comp(box Fn::Z(_), 0, _, _) = func {
+        return Ok(Some(Fn::z()));
     };
     Ok(None)
 }
 
 fn reduce_proj_elim(func: &Fn) -> Result<Option<Fn>, BadFn> {
-    if let FnEnum::Comp(f, gs) = &*resolve(func)?.0 {
-        if let &FnEnum::Proj(select, _) = &*resolve(f)?.0 {
-            let arg = gs.get(select).ok_or(BadFn::Bad)?;
-            return Ok(Some(arg.clone()));
-        }
+    if let Fn::Comp(box Fn::Proj(select, _, _), g_arity, gs, _) = func {
+        let box arg = gs.get(*select).ok_or(BadFn::Bad)?;
+        return Ok(Some(arg.clone()));
     };
     Ok(None)
 }
 
 fn reduce_comp_distribute(func: &Fn) -> Result<Option<Fn>, BadFn> {
-    if let FnEnum::Comp(f, gs) = &*resolve(func)?.0 {
-        if let FnEnum::Comp(int_f, int_gs) = &*resolve(f)?.0 {
-            let new_gs = int_gs
-                .iter()
-                .map(|g| Fn::comp(g.clone(), gs.clone()))
-                .collect();
-            return Ok(Some(Fn::comp(int_f.clone(), new_gs)));
+    if let Fn::Comp(box Fn::Comp(int_f, _, int_gs, _), g_arity, gs, _) = func {
+        if gs.is_empty() {
+            return Ok(None);
+        }
+        let new_gs = int_gs
+            .iter()
+            .map(|g| box Fn::Comp(g.clone(), *g_arity, gs.clone(), FnMeta::NONE))
+            .collect();
+        return Ok(Some(Fn::Comp(
+            int_f.clone(),
+            *g_arity,
+            new_gs,
+            FnMeta::NONE,
+        )));
+    }
+    Ok(None)
+}
+
+fn reduce_const_undistribute(func: &Fn) -> Result<Option<Fn>, BadFn> {
+    if let Fn::Comp(box f, g_arity, gs, _) = func {
+        if gs.is_empty() {
+            return Ok(None);
+        }
+        fn deconst(g: &Box<Fn>) -> Option<Box<Fn>> {
+            if let box Fn::Comp(box int_f, int_arity, int_gs, _) = g {
+                if int_gs.is_empty() {
+                    return Some(box int_f.clone());
+                }
+            };
+            None
+        }
+        let deconsted: Option<im::Vector<Box<Fn>>> = gs.iter().map(deconst).collect();
+        if let Some(new_gs) = deconsted {
+            return Ok(Some(Fn::Comp(
+                box Fn::Comp(box f.clone(), 0, new_gs, FnMeta::NONE),
+                *g_arity,
+                im::vector![],
+                FnMeta::NONE,
+            )));
+        }
+
+        // let new_gs = int_gs
+        //     .iter()
+        //     .map(|g| box Fn::Comp(g.clone(), *g_arity, gs.clone(), FnMeta::NONE))
+        //     .collect();
+        // return Ok(Some(Fn::Comp(int_f.clone(), *g_arity, new_gs, FnMeta::NONE)));
+    }
+    Ok(None)
+}
+
+fn reduce_const_elim(func: &Fn) -> Result<Option<Fn>, BadFn> {
+    if let Fn::Comp(box f, 0, gs, _) = func {
+        if gs.is_empty() {
+            return Ok(Some(f.clone()));
         }
     }
     Ok(None)
@@ -393,48 +385,45 @@ fn reduce_comp_distribute(func: &Fn) -> Result<Option<Fn>, BadFn> {
 // Reduces statement Pr[f, g] * (Z, ...a) =>
 //     f * (...a)
 fn reduce_rec_zero(func: &Fn) -> Result<Option<Fn>, BadFn> {
-    if let FnEnum::Comp(f, gs) = &*resolve(func)?.0 {
-        if let FnEnum::Rec(z_case, _) = &*resolve(f)?.0 {
-            let first_arg = gs.head().ok_or(BadFn::Bad)?;
-            if let FnEnum::Z(_) = &*resolve(first_arg)?.0 {
-                let a = gs.skip(1);
-                if a.is_empty() {
-                    return Ok(Some(z_case.clone()));
-                } else {
-                    return Ok(Some(Fn::comp(z_case.clone(), a)));
-                }
-            }
+    if let Fn::Comp(box f @ Fn::Rec(box z_case, _, _), g_arity, gs, _) = func {
+        let first_arg = gs.head().ok_or(BadFn::Bad)?;
+        if let box Fn::Z(_) = first_arg {
+            let a = gs.skip(1);
+            return Ok(Some(Fn::Comp(
+                box z_case.clone(),
+                *g_arity,
+                a,
+                FnMeta::NONE,
+            )));
         }
     }
 
     Ok(None)
 }
 
-// fn reduce_nullary_comp(fun: &Fn) -> Reduction {
-//     if let FnEnum::Comp(func, args) = &*fun.0 {
-
-// }
-
 // Reduces statement Pr[f, g] * (S * a, ...b) =>
 //     g * (Pr[f, g] * (a, ...b), a, ...b)
 fn reduce_rec_succ(func: &Fn) -> Result<Option<Fn>, BadFn> {
-    if let FnEnum::Comp(f, gs) = &*resolve(func)?.0 {
-        if let FnEnum::Rec(_, s_case) = &*resolve(f)?.0 {
-            let first_arg = gs.head().ok_or(BadFn::Bad)?;
-            let b = gs.skip(1);
+    if let Fn::Comp(box f @ Fn::Rec(_, box s_case, _), orig_arity, gs, _) = func {
+        let first_arg = gs.head().ok_or(BadFn::Bad)?;
+        let b = gs.skip(1);
 
-            if let FnEnum::Comp(maybe_s, maybe_singleton_a) = &*resolve(first_arg)?.0 {
-                if let FnEnum::S = &*resolve(maybe_s)?.0 {
-                    let a = maybe_singleton_a.head().ok_or(BadFn::Bad)?;
+        if let box Fn::Comp(box Fn::S(_), arg_arity, maybe_singleton_a, _) = first_arg {
+            let a = maybe_singleton_a.head().ok_or(BadFn::Bad)?;
 
-                    let decremented_args = im::vector![a.clone()] + b.clone();
-                    let rec_call = Fn::comp(f.clone(), decremented_args.clone());
-                    return Ok(Some(Fn::comp(
-                        s_case.clone(),
-                        im::vector![rec_call] + decremented_args,
-                    )));
-                }
-            }
+            let decremented_args = im::vector![a.clone()] + b.clone();
+            let rec_call = Fn::Comp(
+                box f.clone(),
+                *orig_arity,
+                decremented_args.clone(),
+                FnMeta::NONE,
+            );
+            return Ok(Some(Fn::Comp(
+                box s_case.clone(),
+                *orig_arity,
+                im::vector![box rec_call] + decremented_args,
+                FnMeta::NONE,
+            )));
         }
     }
     Ok(None)
@@ -443,115 +432,103 @@ fn reduce_rec_succ(func: &Fn) -> Result<Option<Fn>, BadFn> {
 // Reduces statement Pr[f, g] * (S, ...b) =>
 //     g * (Pr[f, g] * (P[0], ...b), P[0], ...b)
 fn reduce_rec_succ2(func: &Fn) -> Result<Option<Fn>, BadFn> {
-    if let FnEnum::Comp(f, gs) = &*resolve(func)?.0 {
-        if let FnEnum::Rec(_, s_case) = &*resolve(f)?.0 {
-            let first_arg = gs.head().ok_or(BadFn::Bad)?;
-            let b = gs.skip(1);
+    if let Fn::Comp(box f @ Fn::Rec(_, s_case, _), g_arity, gs, _) = func {
+        let first_arg = gs.head().ok_or(BadFn::Bad)?;
+        let b = gs.skip(1);
 
-            if let FnEnum::S = &*resolve(first_arg)?.0 {
-                let decremented_args = im::vector![Fn::proj(0, 1)] + b.clone();
-                let rec_call = Fn::comp(f.clone(), decremented_args.clone());
-                return Ok(Some(Fn::comp(
-                    s_case.clone(),
-                    im::vector![rec_call] + decremented_args,
-                )));
+        if let box Fn::S(_) = first_arg {
+            // Assert that g_arity = 1, as would be implied by the S.
+            if *g_arity != 1 {
+                return Err(BadFn::Bad);
             }
+            let decremented_args = im::vector![box Fn::proj(0, 1)] + b;
+            let rec_call = Fn::Comp(
+                box f.clone(),
+                *g_arity,
+                decremented_args.clone(),
+                FnMeta::NONE,
+            );
+            return Ok(Some(Fn::Comp(
+                s_case.clone(),
+                *g_arity,
+                im::vector![box rec_call] + decremented_args,
+                FnMeta::NONE,
+            )));
         }
     }
     Ok(None)
 }
 
-// fn reduce_vec(gs : &Vector<Fn>) -> Result<(Vector<Fn>, bool), ReductionErr> {
-//     let res : Vec<Fn> = vec![];
-
-//     for (i, g )in gs.iter().map(reduce).enumerate() {
-//         match g()
-//     }
-
-//     Ok((res.into(), true))
-// }
-
-fn intf(i: i32, arity: usize) -> Fn {
-    let mut res: Fn = Fn(Rc::new(FnEnum::Z(arity)));
-    for _ii in 0..i {
-        res = Fn::comp(Fn::s(), im::vector![res]);
+fn intf(i: i32) -> Fn {
+    let mut res: Fn = Fn::Z(FnMeta {
+        alias: None,
+        int: Some(0),
+    });
+    for ii in 0..i {
+        res = Fn::Comp(
+            box Fn::S(FnMeta::NONE),
+            0,
+            im::vector![box res],
+            FnMeta {
+                alias: None,
+                int: Some(ii + 1),
+            },
+        );
     }
     res
 }
 
-fn eq_after_reduction(f: &Fn, g: &Fn) -> Result<bool, BadFn> {
-    Ok(reduce_fully(f)? == reduce_fully(g)?)
+// // fn eq_after_reduction(f: &Fn, g: &Fn) -> Result<bool, BadFn> {
+// //     Ok(reduce_fully(f)? == reduce_fully(g)?)
+// // }
+
+// //trace_macros!(true);
+
+// // fn check_zero_eq(f: &Fn, g: &Fn) -> Result<bool, BadFn> {
+// //     eq_after_reduction(
+// //         &Fn::comp(f.clone(), im::vector![Fn::z(0)]),
+// //         &Fn::comp(g.clone(), im::vector![Fn::z(0)]),
+// //     )
+// // }
+
+// // fn check_succ_eq(f: &Fn, g: &Fn) -> Result<bool, BadFn> {
+// //     eq_after_reduction(
+// //         &Fn::comp(f.clone(), im::vector![Fn::s()]),
+// //         &Fn::comp(g.clone(), im::vector![Fn::s()]),
+// //     )
+// // }
+
+// Compares h to Pr[f, g] by comparing how they operate on Z.
+fn check_pr_z(h: &Fn, f: &Fn, g: &Fn) -> Result<bool, BadFn> {
+    let prec = Fn::rec(f.clone(), g.clone());
+
+    Ok(reduce_fully(&Fn::comp(prec, im::vector![box Fn::z()]))?
+        == reduce_fully(&Fn::comp(h.clone(), im::vector![box Fn::z()]))?)
 }
 
-// fn intf<'a>(i : i32, arity: usize)-> Fn<'a> {
-//     let mut res = Fn::Z(arity);
-//     for _ii in 0..i {
-//         res = Fn::Comp(Fn::S, vec![res])
-//     }
-//     res
-// }
-
-// const a :Arena<Fn>= Arena::new<Fn>();
-
-// macro_rules! comp {
-//     ($fn:expr, $($arg:expr),*) => {
-
-//     }
-// }
-
-macro_rules! prec {
-    (@fn (Z $arity:tt)) => {Fn::z($arity)};
-    (@fn S) => {Fn::s()};
-    (@fn (int $value:tt $arity:tt)) => {Fn::int($value, $arity)};
-    (@fn (true $arity:tt)) => {Fn::int(1, $arity)};
-    (@fn (false $arity:tt)) => {Fn::int(0, $arity)};
-    (@fn (rec $f:tt $g:tt)) => {
-        Fn::rec(prec![@fn $f], prec![@fn $g])
-    };
-    (@fn (raw $v:expr)) => {$v};
-    (@fn (proj $select:tt $arity:tt)) => {
-        Fn::proj($select, $arity)
-    };
-    (@fn ($f:tt $($gs:tt)+)) => {
-        Fn::comp(prec![@fn $f], vec![$(prec![@fn $gs]),+].into())
-    };
-    (@fn $f:ident) => {$f.clone()};
-    ($(let $name:ident = $fun:tt;)*) => {
-        $(
-            let $name = Fn::alias(stringify!($name), prec!(@fn $fun));
-        )*
-    };
-}
-//trace_macros!(true);
-
-fn check_zero_eq(f: &Fn, g: &Fn) -> Result<bool, BadFn> {
-    eq_after_reduction(
-        &Fn::comp(f.clone(), im::vector![Fn::z(0)]),
-        &Fn::comp(g.clone(), im::vector![Fn::z(0)]),
-    )
-}
-
-fn check_succ_eq(f: &Fn, g: &Fn) -> Result<bool, BadFn> {
-    eq_after_reduction(
-        &Fn::comp(f.clone(), im::vector![Fn::s()]),
-        &Fn::comp(g.clone(), im::vector![Fn::s()]),
-    )
+fn check_pr_s(h: &Fn, f: &Fn, g: &Fn) -> Result<bool, BadFn> {
+    Ok(reduce_fully(&Fn::comp(
+        g.clone(),
+        im::vector![box h.clone(), box Fn::proj(0, 1)],
+    ))? == reduce_fully(&Fn::comp(h.clone(), im::vector![box Fn::s()]))?)
 }
 
 fn main() {
     prec![
-        let t = (int 1 0);
-        let not = (rec t (false 2));
-        let is_even = (rec (true 0) (not (proj 0 2)));
+        let not = (rec (int 1) (const 2 Z));
+        let is_even = (rec (int 1) (not (proj 0 2)));
 
-        let double = (rec (int 0 0) (S (S (proj 0 2))));
-        let bl = (rec (Z 0) (int 1 2));
-        let x = (not not);
+        let double = (rec (int 0) (S (S (proj 0 2))));
+        let bl = (rec Z (const 2 (int 1)));
+        let x = (is_even double);
+        let y = ((not not) (proj 0 2));
     ];
     let mut expr = x;
+    println!("{:?}", check_pr_s(&expr, &Fn::int(1), &y))
+    // prec!
 
-    println!("{:?}", check_succ_eq(&expr, &bl));
-    println!("{:?}", resolve_fully(&t));
-    arity(&expr).unwrap();
-    //expr = reduce_fully(&expr).unwrap()
+    // println!("{:?}", check_succ_eq(&expr, &bl));
+    // println!("{:?}", resolve_fully(&t));
+    // arity(&expr).unwrap();
+    // expr = reduce_fully(&expr).unwrap()
 }
