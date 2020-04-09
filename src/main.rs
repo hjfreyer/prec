@@ -1,7 +1,6 @@
 #![feature(box_syntax, box_patterns, label_break_value, bindings_after_at)]
-#![allow(dead_code)]
+#![allow(dead_code, unused_variables)]
 
-//use im::Vector;
 use std::fmt;
 
 #[derive(Clone, PartialEq, Eq)]
@@ -50,6 +49,14 @@ impl FnMatrix {
         Ok(FnMatrix::new(arity(head)?, fns))
     }
 
+    fn get(&self, idx: usize) -> Option<&Fn> {
+        match self {
+            FnMatrix::Empty(_) => None,
+            FnMatrix::Cons(box car, _) if idx == 0 => Some(car),
+            FnMatrix::Cons(_, box cdr) => cdr.get(idx - 1),
+        }
+    }
+
     fn map<F: ::std::ops::Fn(&Fn) -> Fn>(&self, arity: usize, mapper: F) -> FnMatrix {
         match self {
             FnMatrix::Empty(_) => FnMatrix::Empty(arity),
@@ -80,6 +87,16 @@ impl FnMatrix {
                 box car.clone(),
                 box cdr.apply_to_index(n - 1, mapper)?,
             )),
+            (_, FnMatrix::Empty(_)) => None,
+        }
+    }
+
+    fn replace(&self, index: usize, f: Fn) -> Option<Self> {
+        match (index, self) {
+            (0, FnMatrix::Cons(box car, cdr)) => Some(FnMatrix::Cons(box f, cdr.clone())),
+            (n, FnMatrix::Cons(box car, box cdr)) => {
+                Some(FnMatrix::Cons(box car.clone(), box cdr.replace(n - 1, f)?))
+            }
             (_, FnMatrix::Empty(_)) => None,
         }
     }
@@ -297,427 +314,261 @@ macro_rules! prec {
     };
 }
 
-#[derive(Clone, Debug)]
-enum Path {
-    // Generic.
-    Identity,
-    Composition(Box<Path>, Box<Path>),
-
+#[derive(Copy, Clone, Debug)]
+enum Step {
     // Projection
-    ProjElimSelect,
-    ProjElimSkip,
+    ProjElim,
 
     // Composition.
     CompDistribute,
-    CompLeft(Box<Path>),
-    CompRight(usize, Box<Path>),
-    EtaAbstraction(usize),
-    EtaReduction(usize),
+    EtaAbstraction,
+    EtaReduction,
 
     // Recursion.
     RecElimZ,
     RecElimS,
 }
 
+#[derive(Clone, Debug)]
+enum Path {
+    Identity(Fn),
+    Step(Fn, Step, Fn),
+    Dot(Box<Path>, Box<Path>),
+    CompLeft(Fn, Box<Path>, Fn),
+    CompRight(Fn, usize, Box<Path>, Fn),
+}
+
+impl Path {
+    fn start(&self) -> &Fn {
+        match self {
+            Path::Identity(f) => f,
+            Path::Step(start, _, _) => start,
+            Path::Dot(l, _) => l.start(),
+            Path::CompLeft(start, _, _) => start,
+            Path::CompRight(start, _, _, _) => start,
+        }
+    }
+
+    fn end(&self) -> &Fn {
+        match self {
+            Path::Identity(f) => f,
+            Path::Step(_, _, end) => end,
+            Path::Dot(_, r) => r.end(),
+            Path::CompLeft(_, _, end) => end,
+            Path::CompRight(_, _, _, end) => end,
+        }
+    }
+
+    fn step(func: &Fn, st: Step) -> Result<Path, RewriteErr> {
+        match (st, func) {
+            (
+                Step::ProjElim,
+                Fn::Comp(box Fn::Proj(select, arity, _), FnMatrix::Cons(box car, box cdr), _),
+            ) => {
+                if *select == 0 {
+                    Ok(Path::Step(func.clone(), st, car.clone()))
+                } else {
+                    Ok(Path::Step(
+                        func.clone(),
+                        st,
+                        Fn::Comp(
+                            box Fn::Proj(*select - 1, *arity - 1, FnMeta::NONE),
+                            cdr.clone(),
+                            FnMeta::NONE,
+                        ),
+                    ))
+                }
+            }
+            (Step::ProjElim, _) => Err(RewriteErr::MisappliedRule(st)),
+
+            (
+                Step::CompDistribute,
+                Fn::Comp(box Fn::Comp(box int_f, int_gs, FnMeta { int: None, .. }), ext_gs, _),
+            ) => {
+                let new_gs = int_gs.map(matrix_arity(ext_gs).map_err(RewriteErr::BadFn)?, |g| {
+                    Fn::Comp(box g.clone(), ext_gs.clone(), FnMeta::NONE)
+                });
+                Ok(Path::Step(
+                    func.clone(),
+                    st,
+                    Fn::Comp(box int_f.clone(), new_gs, FnMeta::NONE),
+                ))
+            }
+            (Step::CompDistribute, _) => Err(RewriteErr::MisappliedRule(st)),
+
+            // Reduces statement Pr[z_case, s_case] * (Z * (), ...b) =>
+            //     z_case * (...b)
+            (
+                Step::RecElimZ,
+                Fn::Comp(
+                    box Fn::Rec(z_case, _, _),
+                    FnMatrix::Cons(box Fn::Comp(box Fn::Z(_), FnMatrix::Empty(_), _), box b),
+                    _,
+                ),
+            ) => Ok(Path::Step(
+                func.clone(),
+                st,
+                Fn::Comp(z_case.clone(), b.clone(), FnMeta::NONE),
+            )),
+            (Step::RecElimZ, _) => Err(RewriteErr::MisappliedRule(st)),
+
+            // Reduces statement Pr[z_case, s_case] * (S * a, ...b) =>
+            //     s_case * (Pr[z_case, s_case] * (a, ...b), a, ...b)
+            (
+                Step::RecElimS,
+                Fn::Comp(
+                    rec @ box Fn::Rec(_, s_case, _),
+                    FnMatrix::Cons(
+                        box Fn::Comp(box Fn::S(_), FnMatrix::Cons(a, box FnMatrix::Empty(_)), _),
+                        b,
+                    ),
+                    _,
+                ),
+            ) => {
+                let decremented_args = FnMatrix::Cons(a.clone(), b.clone());
+                let rec_call = Fn::Comp(rec.clone(), decremented_args.clone(), FnMeta::NONE);
+                Ok(Path::Step(
+                    func.clone(),
+                    st,
+                    Fn::Comp(
+                        s_case.clone(),
+                        FnMatrix::Cons(box rec_call, box decremented_args),
+                        FnMeta::NONE,
+                    ),
+                ))
+            }
+            (Step::RecElimS, _) => Err(RewriteErr::MisappliedRule(st)),
+
+            (Step::EtaAbstraction, f) => {
+                let arity = arity(f).map_err(RewriteErr::BadFn)?;
+                Ok(Path::Step(
+                    func.clone(),
+                    st,
+                    Fn::Comp(box f.clone(), FnMatrix::eye(arity), FnMeta::NONE),
+                ))
+            }
+
+            (Step::EtaReduction, Fn::Comp(box f, gs, _)) if *gs == FnMatrix::eye(gs.len()) => {
+                Ok(Path::Step(func.clone(), st, f.clone()))
+            }
+            (Step::EtaReduction, _) => Err(RewriteErr::MisappliedRule(st)),
+        }
+    }
+
+    fn dot(l: &Path, r: &Path) -> Result<Path, RewriteErr> {
+        if l.end() == r.start() {
+            Ok(Path::Dot(box l.clone(), box r.clone()))
+        } else {
+            Err(RewriteErr::IncompatiblePaths(l.clone(), r.clone()))
+        }
+    }
+
+    fn comp_left(func: &Fn, p: &Path) -> Result<Path, RewriteErr> {
+        if let Fn::Comp(box f, gs, _) = func {
+            if p.start() == f {
+                return Ok(Path::CompLeft(
+                    func.clone(),
+                    box p.clone(),
+                    Fn::Comp(box p.end().clone(), gs.clone(), FnMeta::NONE),
+                ));
+            }
+        }
+        Err(RewriteErr::IncompatibleFunctionAndPath(
+            func.clone(),
+            p.clone(),
+        ))
+    }
+
+    fn comp_right(func: &Fn, idx: usize, p: &Path) -> Result<Path, RewriteErr> {
+        let mk_err = || RewriteErr::IncompatibleFunctionAndPath(func.clone(), p.clone());
+        if let Fn::Comp(f, gs, _) = func {
+            let at_idx = gs.get(idx).ok_or_else(mk_err)?;
+
+            if at_idx == p.start() {
+                return Ok(Path::CompRight(
+                    func.clone(),
+                    idx,
+                    box p.clone(),
+                    Fn::Comp(
+                        f.clone(),
+                        gs.replace(idx, p.end().clone())
+                            .expect("We just checked that at_idx is in bounds"),
+                        FnMeta::NONE,
+                    ),
+                ));
+            }
+        }
+
+        return Err(mk_err());
+    }
+}
+
 #[derive(Debug)]
 enum RewriteErr {
     BadFn(BadFn),
-    MisappliedRule(Path),
+    MisappliedRule(Step),
+    IncompatiblePaths(Path, Path),
+    IncompatibleFunctionAndPath(Fn, Path),
 }
 
-fn rewrite(func: &Fn, rule: &Path) -> Result<Fn, RewriteErr> {
-    match (rule, func) {
-        (
-            Path::ProjElimSelect,
-            Fn::Comp(box Fn::Proj(0, _, _), FnMatrix::Cons(box car, _), _),
-        ) => Ok(car.clone()),
-
-        (
-            Path::ProjElimSkip,
-            Fn::Comp(box Fn::Proj(select, arity, _), FnMatrix::Cons(_, box cdr), _),
-        ) if 0 < *select => Ok(Fn::Comp(
-            box Fn::Proj(*select - 1, *arity - 1, FnMeta::NONE),
-            cdr.clone(),
-            FnMeta::NONE,
-        )),
-
-        // (Path::ZElim, Fn::Comp(box z @ Fn::Z(_), FnMatrix::Cons(_, box cdr), _)) => {
-        //     Ok(Fn::Comp(box z.clone(), cdr.clone(), FnMeta::NONE))
-        // }
-
-        (
-            Path::CompDistribute,
-            Fn::Comp(box Fn::Comp(box int_f, int_gs, FnMeta { int: None, .. }), ext_gs, _),
-        ) => {
-            let new_gs = int_gs.map(matrix_arity(ext_gs).map_err(RewriteErr::BadFn)?, |g| {
-                Fn::Comp(box g.clone(), ext_gs.clone(), FnMeta::NONE)
-            });
-            Ok(Fn::Comp(box int_f.clone(), new_gs, FnMeta::NONE))
-        }
-
-        // Reduces statement Pr[z_case, s_case] * (Z * (), ...b) =>
-        //     z_case * (...b)
-        (
-            Path::RecElimZ,
-            Fn::Comp(
-                box Fn::Rec(z_case, _, _),
-                FnMatrix::Cons(box Fn::Comp(box Fn::Z(_), FnMatrix::Empty(_), _), box b),
-                _,
-            ),
-        ) => Ok(Fn::Comp(z_case.clone(), b.clone(), FnMeta::NONE)),
-
-        // Reduces statement Pr[z_case, s_case] * (S * a, ...b) =>
-        //     s_case * (Pr[z_case, s_case] * (a, ...b), a, ...b)
-        (
-            Path::RecElimS,
-            Fn::Comp(
-                rec @ box Fn::Rec(_, s_case, _),
-                FnMatrix::Cons(
-                    box Fn::Comp(box Fn::S(_), FnMatrix::Cons(a, box FnMatrix::Empty(_)), _),
-                    b,
-                ),
-                _,
-            ),
-        ) => {
-            let decremented_args = FnMatrix::Cons(a.clone(), b.clone());
-            let rec_call = Fn::Comp(rec.clone(), decremented_args.clone(), FnMeta::NONE);
-            Ok(Fn::Comp(
-                s_case.clone(),
-                FnMatrix::Cons(box rec_call, box decremented_args),
-                FnMeta::NONE,
-            ))
-        }
-
-        (Path::EtaAbstraction(arity), f) => {
-            Ok(Fn::Comp(box f.clone(), FnMatrix::eye(*arity), FnMeta::NONE))
-        }
-
-        (Path::CompLeft(box rec_rule), Fn::Comp(f, gs, _)) => Ok(Fn::Comp(
-            box rewrite(f, rec_rule)?,
-            gs.clone(),
-            FnMeta::NONE,
-        )),
-
-        (Path::CompRight(index, box rec_rule), Fn::Comp(f, gs, _)) => Ok(Fn::Comp(
-            f.clone(),
-            gs.apply_to_index(*index, |g| rewrite(g, rec_rule))
-                .ok_or(RewriteErr::MisappliedRule(rule.clone()))?,
-            FnMeta::NONE,
-        )),
-
-        (Path::EtaReduction(arity), Fn::Comp(box f, gs, _))
-            if *gs == FnMatrix::eye(*arity) =>
-        {
-            Ok(f.clone())
-        }
-
-        _ => Err(RewriteErr::MisappliedRule(rule.clone())),
+fn reduce_fully(f: &Fn) -> Result<Path, BadFn> {
+    let mut path = Path::Identity(f.clone());
+    println!("{:?}", path.end());
+    while let Some(ext) = suggest_extension(path.end())? {
+        path = Path::dot(&path, &ext).map_err(|e| match e {
+            RewriteErr::BadFn(b) => b,
+            _ => panic!("bad"),
+        })?;
+        println!("{:?}", path.end());
     }
+    println!("reduced");
+    Ok(path)
 }
 
-// fn rewrite_proj_elim_select(func: &Fn) -> Result<Fn, RewriteErr> {
-//     match func {
-//         => Ok(car.clone()),
-//         _ => Err(RewriteErr::MisappliedRule(Path::ProjElimSelect)),
-//     }
-// }
-
-// fn rewrite_proj_elim_skip(func: &Fn) -> Result<Fn, RewriteErr> {
-//     match func {
-//         Fn::Comp(box Fn::Proj(n, _, _), FnMatrix::Cons(_, box cdr), _) if 0 < *n => {
-//             Ok(Fn::Comp(box Fn::Proj(n, _, _), FnMatrix::Cons(_, box cdr), _))},
-//         _ => Err(RewriteErr::MisappliedRule(Path::ProjElimSelect)),
-//     }
-// }
-
-#[derive(Debug)]
-enum Reduction {
-    Redux(Fn),
-    AlreadyReduced(Fn),
-}
-
-fn reduce_fully(f: &Fn) -> Result<Fn, BadFn> {
-    let mut expr = f.clone();
-    println!("{:?}", expr);
-    while let Reduction::Redux(nx) = reduce(&expr)? {
-        expr = nx;
-        println!("{:?}", expr);
-    }
-    println!("reduced: {:?}", expr);
-    Ok(expr)
-}
-
-fn reduce(f: &Fn) -> Result<Reduction, BadFn> {
-    if let Some(rr) = suggest_rewrite(f)? {
-        return Ok(Reduction::Redux(rewrite(f, &rr).expect("something wrong with reduction")));
-    }
-    Ok(Reduction::AlreadyReduced(f.clone()))
-}
-
-fn suggest_rewrite(f: &Fn) -> Result<Option<Path>, BadFn> {
-    macro_rules! try_rewrite {
+fn suggest_extension(func: &Fn) -> Result<Option<Path>, BadFn> {
+    macro_rules! try_step {
         ($rule:expr) => {
-            match rewrite(f, &$rule) {
-                Ok(f) => return Ok(Some($rule)),
-                Err(RewriteErr::MisappliedRule(_)) => (),
+            match Path::step(func, $rule) {
+                Ok(p) => return Ok(Some(p)),
                 Err(RewriteErr::BadFn(b)) => return Err(b),
+                Err(_) => (),
             }
         };
     }
-    try_rewrite![Path::ProjElimSelect];
-    try_rewrite![Path::ProjElimSkip];
-//    try_rewrite![Path::ZElim];
-    let arity = arity(f)?;
+    try_step![Step::ProjElim];
+    try_step![Step::EtaReduction];
+    try_step![Step::CompDistribute];
+    try_step![Step::RecElimZ];
+    try_step![Step::RecElimS];
 
-    try_rewrite![Path::EtaReduction(arity)];
-    try_rewrite![Path::CompDistribute];
-    try_rewrite![Path::RecElimZ];
-    try_rewrite![Path::RecElimS];
-
-    if let Fn::Comp(box Fn::Rec(_, _, _), FnMatrix::Cons(box Fn::Z(_), _), _) = f {
-        try_rewrite![Path::CompRight(
-            0,
-            box Path::EtaAbstraction(0)
-        )];
+    if let Fn::Comp(box Fn::Rec(_, _, _), FnMatrix::Cons(box arg0 @ Fn::Z(_), _), _) = func {
+        let z_path = Path::step(arg0, Step::EtaAbstraction).expect("EtaAbstraction always works");
+        return Ok(Some(
+            Path::comp_right(func, 0, &z_path).expect("EtaAbstraction always works"),
+        ));
     }
-    if let Fn::Comp(box Fn::Rec(_, _, _), FnMatrix::Cons(box Fn::S(_), _), _) = f {
-        try_rewrite![Path::CompRight(
-            0,
-            box Path::EtaAbstraction(1)
-        )];
+    if let Fn::Comp(box Fn::Rec(_, _, _), FnMatrix::Cons(box arg0 @ Fn::S(_), _), _) = func {
+        let s_path = Path::step(arg0, Step::EtaAbstraction).expect("EtaAbstraction always works");
+        return Ok(Some(
+            Path::comp_right(func, 0, &s_path).expect("EtaAbstraction always works"),
+        ));
     }
 
-    if let Fn::Comp(box f, gs, _) = f {
-        if let Some(rr) = suggest_rewrite(f)? {
-            return Ok(Some(Path::CompLeft(box rr)));
+    if let Fn::Comp(box f, gs, _) = func {
+        if let Some(ext) = suggest_extension(f)? {
+            return Ok(Some(Path::comp_left(func, &ext).expect("bad suggestion")));
         }
         for (idx, g) in gs.into_iter().enumerate() {
-            if let Some(rr) = suggest_rewrite(g)? {
-                return Ok(Some(Path::CompRight(idx, box rr)));
+            if let Some(ext) = suggest_extension(g)? {
+                return Ok(Some(
+                    Path::comp_right(func, idx, &ext).expect("bad suggestion"),
+                ));
             }
         }
     }
 
     Ok(None)
 }
-
-// fn reduce_with_preference(func: &Fn) -> Result<Option<Fn>, BadFn> {
-//     if let Some(r) = reduce_z_elim(func)? {
-//         return Ok(Some(r));
-//     }
-//     if let Some(r) = reduce_proj_elim(func)? {
-//         return Ok(Some(r));
-//     }
-//     if let Some(r) = reduce_comp_distribute(func)? {
-//         return Ok(Some(r));
-//     }
-//     if let Some(r) = reduce_const_undistribute(func)? {
-//         return Ok(Some(r));
-//     }
-//     if let Some(r) = reduce_rec_zero(func)? {
-//         return Ok(Some(r));
-//     }
-//     if let Some(r) = reduce_rec_succ(func)? {
-//         return Ok(Some(r));
-//     }
-//     if let Some(r) = reduce_rec_succ2(func)? {
-//         return Ok(Some(r));
-//     }
-//     if let Some(r) = reduce_const_elim(func)? {
-//         return Ok(Some(r));
-//     }
-
-//     if let Fn::Comp(box f, g_arity, gs, _) = func {
-//         if let Some(r) = reduce_with_preference(f)? {
-//             return Ok(Some(Fn::Comp(box r, *g_arity, gs.clone(), FnMeta::NONE)));
-//         }
-
-//         let mut i = gs.iter();
-//         let mut new_g = im::vector![];
-//         let mut any_reduced = false;
-//         while let Some(box g) = i.next() {
-//             if let Some(r) = reduce_with_preference(g)? {
-//                 new_g.push_back(box r);
-//                 any_reduced = true;
-//             } else {
-//                 new_g.push_back(box g.clone())
-//             }
-//         }
-//         if any_reduced {
-//             while let Some(g) = i.next() {
-//                 new_g.push_back(g.clone())
-//             }
-//             return Ok(Some(Fn::Comp(box f.clone(), *g_arity, new_g, FnMeta::NONE)));
-//         }
-//     }
-
-//     Ok(None)
-// }
-
-// fn reduce_z_elim(func: &Fn) -> Result<Option<Fn>, BadFn> {
-//     if let Fn::Comp(box Fn::Z(_), 0, _, _) = func {
-//         return Ok(Some(Fn::z()));
-//     };
-//     Ok(None)
-// }
-
-// fn reduce_proj_elim(func: &Fn) -> Result<Option<Fn>, BadFn> {
-//     if let Fn::Comp(box Fn::Proj(select, _, _), g_arity, gs, _) = func {
-//         let box arg = gs.get(*select).ok_or(BadFn::Bad)?;
-//         return Ok(Some(arg.clone()));
-//     };
-//     Ok(None)
-// }
-
-// fn reduce_comp_distribute(func: &Fn) -> Result<Option<Fn>, BadFn> {
-//     if let Fn::Comp(box Fn::Comp(int_f, _, int_gs, _), g_arity, gs, _) = func {
-//         if gs.is_empty() {
-//             return Ok(None);
-//         }
-//         let new_gs = int_gs
-//             .iter()
-//             .map(|g| box Fn::Comp(g.clone(), *g_arity, gs.clone(), FnMeta::NONE))
-//             .collect();
-//         return Ok(Some(Fn::Comp(
-//             int_f.clone(),
-//             *g_arity,
-//             new_gs,
-//             FnMeta::NONE,
-//         )));
-//     }
-//     Ok(None)
-// }
-
-// fn reduce_const_undistribute(func: &Fn) -> Result<Option<Fn>, BadFn> {
-//     if let Fn::Comp(box f, g_arity, gs, _) = func {
-//         if gs.is_empty() {
-//             return Ok(None);
-//         }
-//         fn deconst(g: &Box<Fn>) -> Option<Box<Fn>> {
-//             if let box Fn::Comp(box int_f, int_arity, int_gs, _) = g {
-//                 if int_gs.is_empty() {
-//                     return Some(box int_f.clone());
-//                 }
-//             };
-//             None
-//         }
-//         let deconsted: Option<im::Vector<Box<Fn>>> = gs.iter().map(deconst).collect();
-//         if let Some(new_gs) = deconsted {
-//             return Ok(Some(Fn::Comp(
-//                 box Fn::Comp(box f.clone(), 0, new_gs, FnMeta::NONE),
-//                 *g_arity,
-//                 im::vector![],
-//                 FnMeta::NONE,
-//             )));
-//         }
-//     }
-//     Ok(None)
-// }
-
-// fn reduce_const_elim(func: &Fn) -> Result<Option<Fn>, BadFn> {
-//     if let Fn::Comp(box f, 0, gs, _) = func {
-//         if gs.is_empty() {
-//             return Ok(Some(f.clone()));
-//         }
-//     }
-//     Ok(None)
-// }
-
-// // Reduces statement Pr[f, g] * (Z, ...a) =>
-// //     f * (...a)
-// fn reduce_rec_zero(func: &Fn) -> Result<Option<Fn>, BadFn> {
-//     if let Fn::Comp(box f @ Fn::Rec(box z_case, _, _), g_arity, gs, _) = func {
-//         let first_arg = gs.head().ok_or(BadFn::Bad)?;
-//         if let box Fn::Z(_) = first_arg {
-//             let a = gs.skip(1);
-//             return Ok(Some(Fn::Comp(
-//                 box z_case.clone(),
-//                 *g_arity,
-//                 a,
-//                 FnMeta::NONE,
-//             )));
-//         }
-//     }
-
-//     Ok(None)
-// }
-
-// // Reduces statement Pr[f, g] * (S * a, ...b) =>
-// //     g * (Pr[f, g] * (a, ...b), a, ...b)
-// fn reduce_rec_succ(func: &Fn) -> Result<Option<Fn>, BadFn> {
-//     if let Fn::Comp(box f @ Fn::Rec(_, box s_case, _), orig_arity, gs, _) = func {
-//         let first_arg = gs.head().ok_or(BadFn::Bad)?;
-//         let b = gs.skip(1);
-
-//         if let box Fn::Comp(box Fn::S(_), arg_arity, maybe_singleton_a, _) = first_arg {
-//             let a = maybe_singleton_a.head().ok_or(BadFn::Bad)?;
-
-//             let decremented_args = im::vector![a.clone()] + b.clone();
-//             let rec_call = Fn::Comp(
-//                 box f.clone(),
-//                 *orig_arity,
-//                 decremented_args.clone(),
-//                 FnMeta::NONE,
-//             );
-//             return Ok(Some(Fn::Comp(
-//                 box s_case.clone(),
-//                 *orig_arity,
-//                 im::vector![box rec_call] + decremented_args,
-//                 FnMeta::NONE,
-//             )));
-//         }
-//     }
-//     Ok(None)
-// }
-
-// // Reduces statement Pr[f, g] * (S, ...b) =>
-// //     g * (Pr[f, g] * (P[0], ...b), P[0], ...b)
-// fn reduce_rec_succ2(func: &Fn) -> Result<Option<Fn>, BadFn> {
-//     if let Fn::Comp(box f @ Fn::Rec(_, s_case, _), g_arity, gs, _) = func {
-//         let first_arg = gs.head().ok_or(BadFn::Bad)?;
-//         let b = gs.skip(1);
-
-//         if let box Fn::S(_) = first_arg {
-//             // Assert that g_arity = 1, as would be implied by the S.
-//             if *g_arity != 1 {
-//                 return Err(BadFn::Bad);
-//             }
-//             let decremented_args = im::vector![box Fn::proj(0, 1)] + b;
-//             let rec_call = Fn::Comp(
-//                 box f.clone(),
-//                 *g_arity,
-//                 decremented_args.clone(),
-//                 FnMeta::NONE,
-//             );
-//             return Ok(Some(Fn::Comp(
-//                 s_case.clone(),
-//                 *g_arity,
-//                 im::vector![box rec_call] + decremented_args,
-//                 FnMeta::NONE,
-//             )));
-//         }
-//     }
-//     Ok(None)
-// }
-
-// fn intf(i: i32) -> Fn {
-//     let mut res: Fn = Fn::Z(FnMeta {
-//         alias: None,
-//         int: Some(0),
-//     });
-//     for ii in 0..i {
-//         res = Fn::Comp(
-//             box Fn::S(FnMeta::NONE),
-//             0,
-//             im::vector![box res],
-//             FnMeta {
-//                 alias: None,
-//                 int: Some(ii + 1),
-//             },
-//         );
-//     }
-//     res
-// }
 
 // // Compares h to Pr[f, g] by comparing how they operate on Z.
 // fn check_pr_z(h: &Fn, f: &Fn, g: &Fn) -> Result<bool, BadFn> {
@@ -734,11 +585,16 @@ fn suggest_rewrite(f: &Fn) -> Result<Option<Path>, BadFn> {
 //     ))? == reduce_fully(&Fn::comp(h.clone(), im::vector![box Fn::s()]))?)
 // }
 
+fn run_test(func: &Fn) {
+    arity(func).unwrap();
+    reduce_fully(func).unwrap();
+}
+
 fn main() {
     prec![
         let a = ((proj 2 3) (int 0) (int 1) (int 2));
-        let t1 = (Z (int 0) (int 1) (int 2));
-        let t2 = (Z (const 2 (int 0)) (const 2 (int 1)) (const 2 (int 2)));
+        let t1 = ((const 3 Z) (int 0) (int 1) (int 2));
+        let t2 = ((const 3 Z) (const 2 (int 0)) (const 2 (int 1)) (const 2 (int 2)));
         let t3 = (((proj 0 2) (proj 1 3) (proj 0 3)) (int 0) (int 1) (int 2));
         let not = (rec (int 1) (const 2 Z));
 
@@ -761,6 +617,6 @@ fn main() {
     // println!("{:?}", resolve_fully(&t));
     // arity(&expr).unwrap();
     // expr = reduce_fully(&expr).unwrap()
-    reduce_fully(&x).unwrap();
-    //    println!("{:?}", reduce_fully(&rewrite(&t4, &Path::CompRight(0, box Path::EtaAbstraction(0))).unwrap()).unwrap());
+    run_test(&x)
+    //    println!("{:?}", reduce_fully(&rewrite(&t4, &Step::CompRight(0, box Step::EtaAbstraction(0))).unwrap()).unwrap());
 }
