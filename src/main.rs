@@ -187,26 +187,29 @@ impl fmt::Debug for Fn {
 }
 
 macro_rules! prec {
-    (@fn Z) => {Fn::z()};
-    (@fn S) => {Fn::s()};
-    (@fn (int $value:tt)) => {Fn::int($value)};
-    (@fn (rec $f:tt $g:tt)) => {
-        Fn::rec(prec![@fn $f], prec![@fn $g])
+    (Z) => {Fn::z()};
+    (S) => {Fn::s()};
+    ((int $value:tt)) => {Fn::int($value)};
+    ((rec $f:tt $g:tt)) => {
+        Fn::rec(prec![$f], prec![$g])
     };
-    (@fn (raw $v:expr)) => {$v};
-    (@fn (proj $select:tt $arity:tt)) => {
+    ((raw $v:expr)) => {$v};
+    ((proj $select:tt $arity:tt)) => {
         Fn::proj($select, $arity)
     };
-    (@fn (const $arity:tt $f:tt)) => {
-        Fn::mk_const($arity, prec![@fn $f])
+    ((const $arity:tt $f:tt)) => {
+        Fn::mk_const($arity, prec![$f])
     };
-    (@fn ($f:tt $($gs:tt)+)) => {
-        Fn::comp(prec![@fn $f], &[$(prec![@fn $gs]),+])
+    (($f:tt $($gs:tt)+)) => {
+        Fn::comp(prec![$f], &[$(prec![$gs]),+])
     };
-    (@fn $f:ident) => {$f.clone()};
+    ($f:ident) => {$f.clone()};
+}
+
+macro_rules! define_prec {
     ($(let $name:ident = $fun:tt;)*) => {
         $(
-            let $name = Fn::alias(stringify!($name), prec!(@fn $fun));
+            let $name = Fn::alias(stringify!($name), prec!($fun));
         )*
     };
 }
@@ -502,7 +505,6 @@ impl Path {
             (Step::EtaReduction, Fn::Comp(box f, gs, _))
                 if gs.syntax_eq(&FnMatrix::eye(gs.len())) =>
             {
-                println!("ETA: {:?} {:?}", f, gs);
                 Ok(Path::Step(func.clone(), st, f.clone()))
             }
             (Step::EtaReduction, _) => Err(RewriteErr::MisappliedRule(st)),
@@ -624,18 +626,14 @@ enum RewriteErr {
 }
 
 fn reduce_fully(f: &Fn) -> Result<Path, BadFn> {
+    f.arity()?;
     let mut path = Path::Identity(f.clone());
-    println!("{:?}", path.end());
     while let Some(ext) = suggest_extension(path.end())? {
-        println!("{:?}", ext);
-
         path = Path::dot(&path, &ext).map_err(|e| match e {
             RewriteErr::BadFn(b) => b,
             _ => panic!("bad"),
         })?;
-        println!("{:?}", path.end());
     }
-    println!("reduced");
     Ok(path)
 }
 
@@ -705,7 +703,20 @@ fn run_test(func: &Fn) {
 }
 
 fn find_path(start: &Fn, end: &Fn) -> Result<Option<Path>, BadFn> {
-    println!("Start: {:?}; Destination: {:?}", start, end);
+    match (start, end) {
+        (_, Fn::Rec(box z_case, s_case, _)) => {
+            if let Some(ext) = find_path_to_rec(start, z_case, s_case)? {
+                return Ok(Some(ext));
+            }
+        }
+        (Fn::Rec(box z_case, s_case, _), _) => {
+            if let Some(ext) = find_path_to_rec(end, z_case, s_case)? {
+                return Ok(Some(Path::Inverse(box ext)));
+            }
+        }
+        _ => (),
+    }
+
     let start_reduced = reduce_fully(start)?;
     let end_reduced = reduce_fully(end)?;
     if start_reduced.end().syntax_eq(end_reduced.end()) {
@@ -717,14 +728,14 @@ fn find_path(start: &Fn, end: &Fn) -> Result<Option<Path>, BadFn> {
     }
 }
 
-fn find_induction(start: &Fn, z_case: &Fn, s_case: &Fn) -> Result<Option<Path>, BadFn> {
-    let start_arity = start.arity()?;
-    let z_app = Fn::Comp(box start.clone(), FnMatrix::z(start_arity), FnMeta::NONE);
-    let s_app = Fn::Comp(box start.clone(), FnMatrix::s(start_arity), FnMeta::NONE);
+fn find_path_to_rec(func: &Fn, z_case: &Fn, s_case: &Fn) -> Result<Option<Path>, BadFn> {
+    let start_arity = func.arity()?;
+    let z_app = Fn::Comp(box func.clone(), FnMatrix::z(start_arity), FnMeta::NONE);
+    let s_app = Fn::Comp(box func.clone(), FnMatrix::s(start_arity), FnMeta::NONE);
 
     let s_case_unrolled = Fn::Comp(
         box s_case.clone(),
-        FnMatrix::Cons(box start.clone(), box FnMatrix::eye(start_arity)),
+        FnMatrix::Cons(box func.clone(), box FnMatrix::eye(start_arity)),
         FnMeta::NONE,
     );
 
@@ -732,7 +743,7 @@ fn find_induction(start: &Fn, z_case: &Fn, s_case: &Fn) -> Result<Option<Path>, 
     let s_path = find_path(&s_app, &s_case_unrolled)?;
 
     if let (Some(z_path), Some(s_path)) = (z_path, s_path) {
-        Path::induction(start, z_case, s_case, &z_path, &s_path)
+        Path::induction(func, z_case, s_case, &z_path, &s_path)
             .map(|p| Some(p))
             .map_err(|e| match e {
                 RewriteErr::BadFn(b) => b,
@@ -743,53 +754,301 @@ fn find_induction(start: &Fn, z_case: &Fn, s_case: &Fn) -> Result<Option<Path>, 
     }
 }
 
-fn find_path_via(start: &Fn, end: &Fn, s_case: &Fn) -> Result<Option<Path>, BadFn> {
-    let z_case = &Fn::Comp(box start.clone(), FnMatrix::z(start.arity()?), FnMeta::NONE);
-    let start_pr_path = find_induction(start, z_case, s_case)?;
-    let end_pr_path = find_induction(end, z_case, s_case)?;
-    if let (Some(start_pr_path), Some(end_pr_path)) = (start_pr_path, end_pr_path) {
-        Ok(Some(
-            Path::dot(&start_pr_path, &Path::Inverse(box end_pr_path)).unwrap(),
-        ))
-    } else {
-        Ok(None)
+// fn find_path_via(start: &Fn, end: &Fn, rec: &Fn) -> Result<Option<Path>, BadFn> {
+// //    let z_case = &Fn::Comp(box start.clone(), FnMatrix::z(start.arity()?), FnMeta::NONE);
+//     let start_pr_path = find_path_to_rec(start, rec)?;
+//     let end_pr_path = find_path_to_rec(end, rec)?;
+//     if let (Some(start_pr_path), Some(end_pr_path)) = (start_pr_path, end_pr_path) {
+//         Ok(Some(
+//             Path::dot(&start_pr_path, &Path::Inverse(box end_pr_path)).unwrap(),
+//         ))
+//     } else {
+//         Ok(None)
+//     }
+// }
+
+struct PathBuilder(Path);
+
+impl PathBuilder {
+    fn new(func: &Fn) -> Result<PathBuilder, BadFn> {
+        func.arity()?;
+        Ok(PathBuilder(Path::Identity(func.clone())))
+    }
+
+    fn to(self, dest: &Fn) -> Option<Self> {
+        let PathBuilder(path) = self;
+        if let Some(ext) = find_path(path.end(), dest).expect("bad") {
+            return Some(PathBuilder(Path::dot(&path, &ext).expect("bad")));
+        }
+        return None;
+    }
+
+    fn simplify(self) -> Self {
+        let PathBuilder(path) = self;
+
+        PathBuilder(Path::dot(&path, &reduce_fully(path.end()).unwrap()).expect("bad"))
+    }
+
+    fn apply_z(self) -> Self {
+        let PathBuilder(path) = self;
+        let arity = path.start().arity().unwrap();
+        let new_start = Fn::Comp(box path.start().clone(), FnMatrix::z(arity), FnMeta::NONE);
+        let new_end = Fn::Comp(box path.end().clone(), FnMatrix::z(arity), FnMeta::NONE);
+        PathBuilder(Path::CompLeft(new_start, box path, new_end))
+    }
+    fn apply_s(self) -> Self {
+        let PathBuilder(path) = self;
+        let arity = path.start().arity().unwrap();
+        let new_start = Fn::Comp(box path.start().clone(), FnMatrix::s(arity), FnMeta::NONE);
+        let new_end = Fn::Comp(box path.end().clone(), FnMatrix::s(arity), FnMeta::NONE);
+        PathBuilder(Path::CompLeft(new_start, box path, new_end))
+    }
+
+    fn build(self) -> Path {
+        self.0
+    }
+}
+
+// #[derive(Debug)]
+enum Interactive {
+    Goal(Fn, Fn),
+    Resolved(Path),
+    Cut(Box<Interactive>, Box<Interactive>),
+    Induction(Fn, Fn, Box<Interactive>, Box<Interactive>),
+}
+
+impl Interactive {
+    fn new(start: Fn, end: Fn) -> Result<Self, BadFn> {
+        start.arity()?;
+        end.arity()?;
+        Ok(Self::Goal(start, end))
+    }
+
+    fn cut(self, mid: Fn) -> Self {
+        let helper = |start, end| -> Interactive {
+            let reduce = reduce_fully(&start).unwrap();
+            Interactive::Cut(
+                box Interactive::Goal(start, mid.clone()),
+                box Interactive::Goal(mid, end),
+            )
+        };
+        self.replace_active_goal(helper)
+    }
+
+    fn simplify(self) -> Self {
+        fn helper(start: Fn, end: Fn) -> Interactive {
+            let reduce = reduce_fully(&start).unwrap();
+            let mid_point = reduce.end().clone();
+            Interactive::Cut(
+                box Interactive::Resolved(reduce),
+                box Interactive::Goal(mid_point, end),
+            )
+        }
+        self.replace_active_goal(helper)
+    }
+
+    fn auto(self) -> Self {
+        match self {
+            Interactive::Resolved(_) => self,
+            Interactive::Goal(start, end) => {
+                if let Some(path) = find_path(&start, &end).unwrap() {
+                    Interactive::Resolved(path)
+                } else {
+                    Interactive::Goal(start, end)
+                }
+            }
+            Interactive::Cut(box Interactive::Resolved(p1), box i2) => match i2.auto() {
+                Interactive::Resolved(p2) => Interactive::Resolved(Path::dot(&p1, &p2).unwrap()),
+                i2 => Interactive::Cut(box Interactive::Resolved(p1), box i2),
+            },
+            Interactive::Cut(box i1, box i2) => Interactive::Cut(box i1.auto(), box i2),
+
+            Interactive::Induction(start, end, box Interactive::Resolved(p1), box i2) => {
+                match i2.auto() {
+                    Interactive::Resolved(p2) => {
+                        if let Fn::Rec(box z_case, box s_case, _) = end {
+                            Interactive::Resolved(
+                                Path::induction(&start, &z_case, &s_case, &p1, &p2).unwrap(),
+                            )
+                        } else {
+                            panic!("no")
+                        }
+                    }
+                    i2 => Interactive::Induction(start, end, box Interactive::Resolved(p1), box i2),
+                }
+            }
+            Interactive::Induction(start, end, box i1, box i2) => {
+                Interactive::Induction(start, end, box i1.auto(), box i2)
+            }
+        }
+    }
+
+    fn induction(self) -> Self {
+        let helper = |start: Fn, end: Fn| {
+            if let Fn::Rec(box z_case, box s_case, _) = &end {
+                let arity = start.arity().unwrap();
+                let func_z_start = Fn::Comp(box start.clone(), FnMatrix::z(arity), FnMeta::NONE);
+                let i1 = Interactive::Goal(func_z_start, z_case.clone());
+
+                let func_s_start = Fn::Comp(box start.clone(), FnMatrix::s(arity), FnMeta::NONE);
+                let s_path_applied = Fn::Comp(
+                    box s_case.clone(),
+                    FnMatrix::Cons(box start.clone(), box FnMatrix::eye(arity)),
+                    FnMeta::NONE,
+                );
+
+                let i2 = Interactive::Goal(func_s_start, s_path_applied);
+
+                Interactive::Induction(start, end, box i1, box i2)
+            } else {
+                Interactive::Goal(start, end)
+            }
+        };
+        self.replace_active_goal(helper)
+    }
+
+    fn active_goal(&self) -> Option<(&Fn, &Fn)> {
+        match self {
+            Interactive::Resolved(_) => None,
+            Interactive::Goal(start, end) => Some((start, end)),
+            Interactive::Cut(box i1, box i2) => i1.active_goal().or_else(|| i2.active_goal()),
+            Interactive::Induction(_, _, box i1, box i2) => {
+                i1.active_goal().or_else(|| i2.active_goal())
+            }
+        }
+    }
+
+    fn replace_active_goal<F: FnOnce(Fn, Fn) -> Interactive>(self, f: F) -> Self {
+        enum Res<F> {
+            Done(Interactive),
+            Pass(Interactive, F),
+        }
+        fn helper<F: FnOnce(Fn, Fn) -> Interactive>(s: Interactive, f: F) -> Res<F> {
+            match s {
+                Interactive::Resolved(_) => Res::Pass(s, f),
+                Interactive::Goal(start, end) => Res::Done(f(start, end)),
+                Interactive::Cut(box i1, box i2) => match helper(i1, f) {
+                    Res::Done(i1) => Res::Done(Interactive::Cut(box i1, box i2)),
+                    Res::Pass(i1, f) => match helper(i2, f) {
+                        Res::Done(i2) => Res::Done(Interactive::Cut(box i1, box i2)),
+                        Res::Pass(i2, f) => panic!("no active goal"),
+                    },
+                },
+                Interactive::Induction(start, end, box i1, box i2) => match helper(i1, f) {
+                    Res::Done(i1) => Res::Done(Interactive::Induction(start, end, box i1, box i2)),
+                    Res::Pass(i1, f) => match helper(i2, f) {
+                        Res::Done(i2) => {
+                            Res::Done(Interactive::Induction(start, end, box i1, box i2))
+                        }
+                        Res::Pass(i2, f) => panic!("no active goal"),
+                    },
+                },
+            }
+        }
+        match helper(self, f) {
+            Res::Done(res) => res,
+            Res::Pass(_, _) => panic!("no active goal"),
+        }
+    }
+
+    fn current_start(&self) -> Option<&Fn> {
+        self.active_goal().map(|(start, end)| start)
+    }
+    fn current_end(&self) -> Option<&Fn> {
+        self.active_goal().map(|(start, end)| end)
+    }
+    fn overall_start(&self) -> &Fn {
+        match self {
+            Interactive::Resolved(path) => path.start(),
+            Interactive::Goal(start, end) => start,
+            Interactive::Cut(box i1, box i2) => i1.overall_start(),
+            Interactive::Induction(start, end, box i1, box i2) => start,
+        }
+    }
+    fn overall_end(&self) -> &Fn {
+        match self {
+            Interactive::Resolved(path) => path.end(),
+            Interactive::Goal(start, end) => end,
+            Interactive::Cut(box i1, box i2) => i2.overall_end(),
+            Interactive::Induction(start, end, box i1, box i2) => end,
+        }
+    }
+}
+
+impl fmt::Debug for Interactive {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.write_fmt(format_args!(
+            "Overall Goal: {:?} -> {:?}\n",
+            self.overall_start(),
+            self.overall_end()
+        ))?;
+        match self {
+            Interactive::Goal(start, end) => Ok(()),
+            Interactive::Resolved(p) => fmt.write_fmt(format_args!("Solved: {:?}\n", p)),
+            Interactive::Cut(_, _) | Interactive::Induction(_, _, _, _) => {
+                fmt.write_fmt(format_args!(
+                    "Current Goal: {:?} -> {:?}",
+                    self.current_start(),
+                    self.current_end()
+                ))
+            }
+        }
     }
 }
 
 fn main() {
-    prec![
-            let a = ((proj 2 3) (int 0) (int 1) (int 2));
-            let t1 = ((const 3 Z) (int 0) (int 1) (int 2));
-            let t2 = ((const 3 Z) (const 2 (int 0)) (const 2 (int 1)) (const 2 (int 2)));
-            let t3 = (((proj 0 2) (proj 1 3) (proj 0 3)) (int 0) (int 1) (int 2));
-            let not = (rec (int 1) (const 2 Z));
+    define_prec![
+                let a = ((proj 2 3) (int 0) (int 1) (int 2));
+                let t1 = ((const 3 Z) (int 0) (int 1) (int 2));
+                let t2 = ((const 3 Z) (const 2 (int 0)) (const 2 (int 1)) (const 2 (int 2)));
+                let t3 = (((proj 0 2) (proj 1 3) (proj 0 3)) (int 0) (int 1) (int 2));
+                let not = (rec (int 1) (const 2 Z));
 
-            let t4 = (not Z);
-            let t5 = (not S);
-            let t6 = (not (const 5 Z));
-            let t7 = (not (not (const 1 (int 5))));
+                let t4 = (not Z);
+                let t5 = (not S);
+                let t6 = (not (const 5 Z));
+                let t7 = (not (not (const 1 (int 5))));
 
-            let is_even = (rec (int 1) (not (proj 0 2)));
+                let is_even = (rec (int 1) (not (proj 0 2)));
 
-            let double = (rec (int 0) (S (S (proj 0 2))));
-            let mod2 = (rec (int 0) (not (proj 0 2)));
-    //        let half = (rec (int 0) )
-            let bl = (rec Z (const 2 (int 1)));
-            let ed = (is_even double);
-            let edz = (ed (const 0 Z));
-            let eds = (ed (S (proj 0 1)));
+                let double = (rec (int 0) (S (S (proj 0 2))));
+                let maybe_increment = (rec (proj 0 1) (S (proj 2 3)));
+    //            let plus_mod2 = (rec (int 0) (not (proj 0 2)));
 
-            let zcase = (int 1);
-            let scase = (not (not (proj 0 2)));
-            let scase_applied = (scase ed (proj 0 1));
+                let mod2 = (rec (int 0) (not (proj 0 2)));
+                let plus_mod2 = (maybe_increment (not (is_even (proj 0 2))) (proj 1 2));
+                let half = (rec (int 0) (plus_mod2 (proj 1 2) (proj 0 2)));
 
-            let nn = (not not);
-            let nns = (nn S);
+                let hd = (half double);
+                let ident = (proj 0 1);
+                let hd_scase = (S (proj 0 2));
 
-            let one = (const 1 (int 1));
-            let one_zcase = (int 1);
-            let one_scase = (const 2 (int 1));
-        ];
+
+        //        let half = (rec (int 0) )
+                let bl = (rec Z (const 2 (int 1)));
+                let ed = (is_even double);
+                let edz = (ed (const 0 Z));
+                let eds = (ed (S (proj 0 1)));
+
+                let zcase = (int 1);
+                let scase = (not (not (proj 0 2)));
+                let scase_applied = (scase ed (proj 0 1));
+
+                let nn = (not not);
+                let nns = (nn S);
+
+                let bl = (rec Z (const 2 (int 1)));
+
+                let one = (const 1 (int 1));
+                let one_zcase = (int 1);
+                let one_scase = (const 2 (int 1));
+
+                let maybe_or_not_increment = (maybe_increment (not (proj 0 2)) (maybe_increment (proj 0 2) (proj 1 2)));
+                let increment_arg1 = (S (proj 1 2));
+                let rec_bridge = (rec S (S (proj 2 3)));
+
+                let factored = (maybe_or_not_increment (not (is_even double)) (half double));
+            ];
     // let mut expr = x;
     // println!("{:?}", check_pr_s(&expr, &Fn::int(1), &y))
     // prec!
@@ -803,8 +1062,32 @@ fn main() {
 
     //println!("{:?}", find_induction(&one, &zcase, &scase));
 
-    //println!("{:?}", find_path_via(&ed, &one, &scase));
-    reduce_fully(&nns);
+    //    println!("{:?}", find_path_via(&hd, &ident, &hd_scase));
+    //let path = find_path_via(&nn, &bl, &prec![(const 2 (int 1))]).unwrap().unwrap();
+    //let path = find_path_via(&hd, &ident, &prec![(const 2 (int 1))]).unwrap().unwrap();
+
+    let i = Interactive::new(hd.clone(), prec![(proj 0 1)]).unwrap()
+        .cut(prec![(rec Z (S (proj 0 2)))])
+        .induction()
+        .auto()
+        .cut(factored.clone())
+        .auto()
+        .simplify()
+//     .auto()
+        // .auto()
+        // .uncut();
+        ;
+    //      println!("{:?} -> {:?}", i.current_start(), i.current_end());
+    println!("{:?}", i);
+
+    // println!("{:?} -> {:?}", path.start(), path.end());
+
+    //  println!("{:?}", maybe_or_not_to_inc);
+    // println!("{:?}", reduce_fully(&factored).unwrap().end());
+
+    //    println!("{:?}", reduce_fully(&prec![(maybe_or_not_increment (S (proj 0 2)) (proj 1 2))]).unwrap().end());
+    //    println!("{:?}", reduce_fully(&prec![(increment_arg1 (S (proj 0 2)) (proj 1 2))]).unwrap().end());
+
     // run_test(&t7)
     //    println!("{:?}", reduce_fully(&rewrite(&t4, &Step::CompRight(0, box Step::EtaAbstraction(0))).unwrap()).unwrap());
 }
