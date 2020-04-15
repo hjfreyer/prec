@@ -1,6 +1,8 @@
 #[macro_use]
 mod func;
-use func::{Func, View};
+mod rewrite;
+use crate::func::{Func, View};
+use crate::rewrite::Rule;
 
 // #![feature(
 //     box_syntax,
@@ -1686,7 +1688,17 @@ fn main() {
         let _not = (rec (int 1) (const 2 Z));
         let _b = ((proj 2 3) (const 0 (int 1)) (int 2) (int 3));
     ];
-    println!("{:?}", _t1.set_tag(func::Tag::None))
+
+    let ca = rewrite::RuleFamily::match_side(rewrite::RuleFamily::CompAssoc, 
+        rewrite::Side::Left, &_a).unwrap().rhs();
+    let ca = rewrite::RuleFamily::match_side(rewrite::RuleFamily::CompAssoc, 
+        rewrite::Side::Left, &ca).unwrap().rhs();
+    println!("{:?}", ca)
+    // if let View::Comp(f, g) = ca.image().view() {
+    //     println!("{:?}", g);
+    //     let gg = rewrite::SkipStack::from_preimage(g).unwrap().image();
+    //     println!("{:?}", gg);
+    // }
     // let z1 = func::View::Z;
     // let z2 = func::View::Z;
 

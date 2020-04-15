@@ -236,15 +236,31 @@ impl fmt::Debug for Func {
 
             match func.view() {
                 View::Z => fmt.write_str("Z"),
-                View::S => fmt.write_str("Z"),
+                View::S => fmt.write_str("S"),
                 &View::Select(arity) => fmt.write_fmt(format_args!("(select {})", arity)),
                 &View::Skip(arity) => fmt.write_fmt(format_args!("(skip {})", arity)),
 
                 &View::Empty(arity) => fmt.write_fmt(format_args!("(empty {})", arity)),
-                View::Stack(car, cdr) => fmt.write_fmt(format_args!("(stack {:?} {:?})", car, cdr)),
-                View::Comp(f, g) => fmt.write_fmt(format_args!("(comp {:?} {:?})", f, g)),
+                View::Stack(car, cdr) => {
+                    fmt.write_str("(stack ")?;
+                    write(car, fmt)?;
+                    fmt.write_str(" ")?;
+                    write(cdr, fmt)?;
+                    fmt.write_str(")")
+                }
+                View::Comp(f, g) => {
+                    fmt.write_str("(comp ")?;
+                    write(f, fmt)?;
+                    fmt.write_str(" ")?;
+                    write(g, fmt)?;
+                    fmt.write_str(")")
+                }
                 View::Rec(z_case, s_case) => {
-                    fmt.write_fmt(format_args!("(rec {:?} {:?})", z_case, s_case))
+                    fmt.write_str("(rec ")?;
+                    write(z_case, fmt)?;
+                    fmt.write_str(" ")?;
+                    write(s_case, fmt)?;
+                    fmt.write_str(")")
                 }
             }
         }
@@ -280,3 +296,7 @@ macro_rules! func_let {
         )*
     };
 }
+
+// (comp (comp (comp (select 1) (skip 2)) (skip 3)) (stack Z (stack (comp S Z) (stack (comp S (comp S Z)) (empty 0)))))
+// (comp (comp (select 1) (skip 2)) (comp (skip 3) (stack Z (stack (comp S Z) (stack (comp S (comp S Z)) (empty 0))))))
+// (comp (comp (select 1) (skip 2)) (stack (comp S Z) (stack (comp S (comp S Z)) (empty 0)))))
