@@ -1,9 +1,12 @@
-use crate::func::{BadFunc, Func, View};
-
-pub struct Equation(Func, Func);
+use crate::func;
+use func::{BadFunc, Func};
+use func::View as FView;
 
 #[derive(Clone, Debug)]
-pub enum RuleView {
+pub struct Rule(View);
+
+#[derive(Clone, Debug)]
+pub enum View {
     CompAssoc(Func, Func, Func),
     SkipStack(u32, Func, Func),
     // CompDistribute,
@@ -27,10 +30,13 @@ pub enum RuleView {
     // Induction(Box<Path>),
 }
 
+
 #[derive(Clone, Debug, Copy)]
-pub enum RuleFamily {
-    CompAssoc,
-    SkipStack,
+pub enum Factory {
+    CompAssocFwd,
+    CompAssocRev,
+
+    SkipStackFwd,
     // CompDistribute,
     // CompFactor,
 
@@ -52,102 +58,91 @@ pub enum RuleFamily {
     // Induction(Box<Path>),
 }
 
-impl RuleFamily {
-pub    fn match_side(self, side: Side, func: &Func) -> MatchResult {
-        match (self, side) {
-            (RuleFamily::CompAssoc, Side::Left) => {
-                if let View::Comp(fg, h) = func.view() {
-                    if let View::Comp(f, g) = fg.view() {
-                        return MatchResult::Some(
-                            Rule::validate(RuleView::CompAssoc(f.clone(), g.clone(), h.clone()))
+impl Factory {
+    pub fn for_func(self, func: &Func) -> Option<Rule> {
+        match self {
+            Factory::CompAssocFwd => {
+                if let FView::Comp(fg, h) = func.view() {
+                    if let FView::Comp(f, g) = fg.view() {
+                        return Some(
+                            Rule::validate(View::CompAssoc(f.clone(), g.clone(), h.clone()))
                                 .unwrap(),
                         );
                     }
                 }
-                MatchResult::None
+                None
             }
-            (RuleFamily::CompAssoc, Side::Right) => {
-                if let View::Comp(f, gh) = func.view() {
-                    if let View::Comp(g, h) = gh.view() {
-                        return MatchResult::Some(
-                            Rule::validate(RuleView::CompAssoc(f.clone(), g.clone(), h.clone()))
+            Factory::CompAssocRev => {
+                if let FView::Comp(f, gh) = func.view() {
+                    if let FView::Comp(g, h) = gh.view() {
+                        return Some(
+                            Rule::validate(View::CompAssoc(f.clone(), g.clone(), h.clone()))
                                 .unwrap(),
                         );
                     }
                 }
-                MatchResult::None
+                None
             }
-            (RuleFamily::SkipStack, Side::Left) => {
-                if let View::Comp(f, g) = func.view() {
-                    if let (View::Skip(arity), View::Stack(car, cdr)) = (f.view(), g.view()) {
-                        return MatchResult::Some(
-                            Rule::validate(RuleView::SkipStack(*arity, car.clone(), cdr.clone()))
+            Factory::SkipStackFwd => {
+                if let FView::Comp(f, g) = func.view() {
+                    if let (FView::Skip(arity), FView::Stack(car, cdr)) = (f.view(), g.view()) {
+                        return Some(
+                            Rule::validate(View::SkipStack(*arity, car.clone(), cdr.clone()))
                                 .unwrap(),
                         );
                     }
                 }
-                MatchResult::None
-            }
-            (RuleFamily::SkipStack, Side::Right) => MatchResult::Underconstrained,
-            //     fn from_image(func: &Func) -> Result<Self> {
-            //         if let View::Comp(f, g) = func.view() {
-            //             if let View::Comp(g, h) = g.view() {
-            //                 return Result::Some(CompAssoc (
-            //                      f.clone(),
-            //                      g.clone(),
-            //                      h.clone(),
-            //                 ));
-            //             }
-            //         }
-            //         Result::None
-            //     }
+                None
+            } //     fn from_image(func: &Func) -> Result<Self> {
+              //         if let FView::Comp(f, g) = func.view() {
+              //             if let FView::Comp(g, h) = g.view() {
+              //                 return Result::Some(CompAssoc (
+              //                      f.clone(),
+              //                      g.clone(),
+              //                      h.clone(),
+              //                 ));
+              //             }
+              //         }
+              //         Result::None
+              //     }
         }
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Rule(RuleView);
 
-pub enum Side {
+enum Side {
     Left,
     Right,
 }
 
-#[derive(Clone, Debug)]
-pub enum MatchResult {
-    None,
-    Some(Rule),
-    Underconstrained,
-}
-
 impl Rule {
     // pub fn comp_assoc(f: Func, g: Func, h: Func) -> Result<Rule, BadFunc> {
-    //     Rule(RuleView::CompAssoc(f, g, h)).validate();
+    //     Rule(View::CompAssoc(f, g, h)).validate();
     // }
 
     // pub fn skip_stack(skip_arity: u32, stack_car: Func, stack_cdr: Func) -> Result<Rule, BadFunc> {
-    //     Rule(RuleView::SkipStack(skip_arity, stack_car, stack_cdr)).validate()
+    //     Rule(View::SkipStack(skip_arity, stack_car, stack_cdr)).validate()
     // }
 
-    pub fn validate(view: RuleView) -> Result<Rule, BadFunc> {
+    pub fn validate(view: View) -> Result<Rule, BadFunc> {
         let res = Rule(view);
         res.clone().try_side(Side::Left)?;
         res.clone().try_side(Side::Right)?;
         Ok(res)
     }
 
-    // pub fn match_rule(view : RuleView) -> Result<Rule, BadFunc> {
+    // pub fn match_rule(view : View) -> Result<Rule, BadFunc> {
 
     // }
 
     fn try_side(self, side: Side) -> Result<Func, BadFunc> {
         match self.0 {
-            RuleView::CompAssoc(f, g, h) => match side {
+            View::CompAssoc(f, g, h) => match side {
                 Side::Left => Ok(Func::comp(Func::comp(f, g)?, h)?),
                 Side::Right => Ok(Func::comp(f, Func::comp(g, h)?)?),
             },
 
-            RuleView::SkipStack(skip_arity, stack_car, stack_cdr) => match side {
+            View::SkipStack(skip_arity, stack_car, stack_cdr) => match side {
                 Side::Left => {
                     Func::comp(Func::skip(skip_arity)?, Func::stack(stack_car, stack_cdr)?)
                 }
@@ -201,16 +196,6 @@ pub enum Path {
 //     Underconstrained,
 // }
 
-impl MatchResult {
-    pub fn unwrap(self) -> Rule {
-        match self {
-            MatchResult::Some(f) => f,
-            MatchResult::None => panic!("rule couldn't be constructed"),
-            MatchResult::Underconstrained => panic!("precise rule couldn't be determined"),
-        }
-    }
-}
-
 // pub trait Rule {
 //     fn from_preimage(func: &Func) -> Result<Self>
 //     where
@@ -226,8 +211,8 @@ impl MatchResult {
 
 // impl Rule for CompAssoc {
 //     fn from_preimage(func: &Func) -> Result<Self> {
-//         if let View::Comp(f, h) = func.view() {
-//             if let View::Comp(f, g) = f.view() {
+//         if let FView::Comp(f, h) = func.view() {
+//             if let FView::Comp(f, g) = f.view() {
 //                 return Result::Some(CompAssoc( f.clone(),
 //                     g.clone(),
 //                      h.clone(),
@@ -237,8 +222,8 @@ impl MatchResult {
 //         Result::None
 //     }
 //     fn from_image(func: &Func) -> Result<Self> {
-//         if let View::Comp(f, g) = func.view() {
-//             if let View::Comp(g, h) = g.view() {
+//         if let FView::Comp(f, g) = func.view() {
+//             if let FView::Comp(g, h) = g.view() {
 //                 return Result::Some(CompAssoc (
 //                      f.clone(),
 //                      g.clone(),
@@ -262,8 +247,8 @@ impl MatchResult {
 
 // impl Rule for SkipStack {
 //     fn from_preimage(func: &Func) -> Result<Self> {
-//         if let View::Comp(f, g) = func.view() {
-//             if let (View::Skip(arity), View::Stack(car, cdr)) = (f.view(), g.view()) {
+//         if let FView::Comp(f, g) = func.view() {
+//             if let (FView::Skip(arity), FView::Stack(car, cdr)) = (f.view(), g.view()) {
 //                 return Result::Some(Self(*arity, car.clone(), cdr.clone()))
 //             }
 //         }

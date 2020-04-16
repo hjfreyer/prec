@@ -200,6 +200,31 @@ impl Func {
             }
         }
     }
+
+    pub fn syntax_eq(&self, other: &Self) -> bool {
+        match (self.view(), other.view()) {
+            (View::Z, View::Z) => true,
+            (View::Z, _) => false,
+            (View::S, View::S) => true,
+            (View::S, _) => false,
+            (View::Select(s_arity), View::Select(o_arity)) => s_arity == o_arity,
+            (View::Select(_), _) => false,
+            (View::Skip(s_arity), View::Skip(o_arity)) => s_arity == o_arity,
+            (View::Skip(_), _) => false,
+            (View::Empty(s_arity), View::Empty(o_arity)) => s_arity == o_arity,
+            (View::Empty(_), _) => false,
+            (View::Stack(s_car, s_cdr), View::Stack(o_car, o_cdr)) => {
+                s_car.syntax_eq(o_car) && s_cdr.syntax_eq(o_cdr)
+            }
+            (View::Stack(_, _), _) => false,
+            (View::Comp(s_f, s_g), View::Comp(o_f, o_g)) => {
+                s_f.syntax_eq(o_f) && s_g.syntax_eq(o_g)
+            }
+            (View::Comp(_, _), _) => false,
+            (View::Rec(s_f, s_g), View::Rec(o_f, o_g)) => s_f.syntax_eq(o_f) && s_g.syntax_eq(o_g),
+            (View::Rec(_, _), _) => false,
+        }
+    }
 }
 
 impl fmt::Debug for Func {

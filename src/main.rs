@@ -1,5 +1,6 @@
 #[macro_use]
 mod func;
+mod tactics;
 mod rewrite;
 use crate::func::{Func, View};
 use crate::rewrite::Rule;
@@ -1689,11 +1690,15 @@ fn main() {
         let _b = ((proj 2 3) (const 0 (int 1)) (int 2) (int 3));
     ];
 
-    let ca = rewrite::RuleFamily::match_side(rewrite::RuleFamily::CompAssoc, 
-        rewrite::Side::Left, &_a).unwrap().rhs();
-    let ca = rewrite::RuleFamily::match_side(rewrite::RuleFamily::CompAssoc, 
-        rewrite::Side::Left, &ca).unwrap().rhs();
-    println!("{:?}", ca)
+    let mut g = tactics::Goal::Active(tactics::Endpoints(_a.clone(), _a.clone()));
+    println!("{:?}", g);
+    g.apply(tactics::Factory::Symm).apply(tactics::Factory::Refl);
+    println!("{:?}", g);
+    // let ca = rewrite::RuleFamily::match_side(rewrite::RuleFamily::CompAssoc,
+    //     rewrite::Side::Left, &_a).unwrap().rhs();
+    // let ca = rewrite::RuleFamily::match_side(rewrite::RuleFamily::CompAssoc,
+    //     rewrite::Side::Left, &ca).unwrap().rhs();
+    // println!("{:?}", ca)
     // if let View::Comp(f, g) = ca.image().view() {
     //     println!("{:?}", g);
     //     let gg = rewrite::SkipStack::from_preimage(g).unwrap().image();
