@@ -25,7 +25,16 @@ pub enum View {
 pub struct Func(Rc<View>, Tag);
 
 #[derive(Debug)]
-pub struct Arity(u32, u32);
+pub struct Arity(pub u32, pub u32);
+
+impl Arity {
+    pub fn out(&self) -> u32 {
+        self.0
+    }
+    pub fn r#in(&self) -> u32 {
+        self.1
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum Tag {
@@ -140,7 +149,7 @@ impl Func {
     pub fn int(value: u32) -> Func {
         let mut res = Func::z().set_tag(Tag::Int(0));
         for ii in 0..value {
-            res = Func::comp(Func::s(), res)
+            res = Func::apply(Func::s(), &[res])
                 .unwrap()
                 .set_tag(Tag::Int(ii + 1));
         }
@@ -166,6 +175,30 @@ impl Func {
 
         let boxed_gs = gs.iter().map(|g| Box::new(g.clone())).collect();
         Ok(res.set_tag(Tag::Applicaton(Box::new(f), boxed_gs)))
+    }
+
+    pub fn eye(arity: u32) -> Func {
+        let mut res = Func::empty(arity);
+        for i in (0..arity).rev() {
+            res = Func::stack(Func::proj(i, arity).unwrap(), res).unwrap()
+        }
+        res
+    }
+
+    pub fn z_eye(arity: u32) -> Func {
+        Func::stack(
+            Func::mk_const(arity - 1, Func::z()).unwrap(),
+            Func::eye(arity - 1),
+        )
+        .unwrap()
+    }
+
+    pub fn s_eye(arity: u32) -> Func {
+        let mut res = Func::empty(arity);
+        for i in (0..arity).rev() {
+            res = Func::stack(Func::proj(i, arity).unwrap(), res).unwrap()
+        }
+        res
     }
 
     pub fn set_tag(self, tag: Tag) -> Func {
@@ -317,6 +350,9 @@ macro_rules! func {
     };
     ((const $arity:tt $f:tt)) => {
         $crate::func::Func::mk_const($arity, func![$f]).unwrap()
+    };
+    ((comp $f:tt $g:tt)) => {
+        $crate::func::Func::comp(func![$f], func![$g]).unwrap()
     };
     (($f:tt $($gs:tt)+)) => {
         $crate::func::Func::apply(func![$f], &[$(func![$gs]),+]).unwrap()

@@ -6,8 +6,8 @@ mod rewrite;
 mod tactics;
 use crate::base::Endpoints;
 use crate::func::{Func, View};
-use crate::rewrite::Rewrite;
 use crate::rewrite::factory::Factory;
+use crate::rewrite::Rewrite;
 // #![feature(
 //     box_syntax,
 //     box_patterns,
@@ -1690,6 +1690,13 @@ fn main() {
         let _t2 = ((const 3 Z) (const 2 (int 0)) (const 2 (int 1)) (const 2 (int 2)));
         let _t3 = (((proj 0 2) (proj 1 3) (proj 0 3)) (int 0) (int 1) (int 2));
         let not = (rec (int 1) (const 2 Z));
+
+
+        let _t4 = (not Z);
+        let _t8 = (comp not Z);
+        let _t5 = (not S);
+        let _t6 = (not (const 5 Z));
+        let _t7 = (not (not (const 1 (int 5))));
         let _b = ((proj 2 3) (const 0 (int 1)) (int 2) (int 3));
 
         let is_even = (rec (int 1) (not (proj 0 2)));
@@ -1699,7 +1706,11 @@ fn main() {
 
     //    let g = goal::HorizontalPath::new(func![(is_even double)], func![(const 1 (int 1))]);
 
-    let reduction = std::iter::successors(Some(_a), |a| rewrite::factory::Reduce().for_lhs(a.clone()).map(|rw| rw.rhs()));
+    let reduction = std::iter::successors(Some(_t8), |a| {
+        rewrite::factory::Reduce()
+            .for_lhs(a.clone())
+            .map(|rw| {println!("{:?}", rw); rw.rhs()})
+    }).take(100);
     for r in reduction {
         println!("{:?}", r)
     }
@@ -1726,11 +1737,6 @@ fn main() {
 
     // println!("{}", s1 == s2)
     //     define_prec![
-
-    //                 let t4 = (not Z);
-    //                 let t5 = (not S);
-    //                 let t6 = (not (const 5 Z));
-    //                 let t7 = (not (not (const 1 (int 5))));
 
     //
 
