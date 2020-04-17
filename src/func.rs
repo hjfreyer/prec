@@ -1,3 +1,4 @@
+use crate::base::SyntaxEq;
 use std::fmt;
 use std::rc::Rc;
 
@@ -178,6 +179,14 @@ impl Func {
         &*self.0
     }
 
+    pub fn into_view(self) -> View {
+        (*self.0).clone()
+    }
+
+    pub fn tag(&self) -> &Tag {
+        &self.1
+    }
+
     pub fn arity(&self) -> Arity {
         match self.view() {
             View::Z => Arity(1, 0),
@@ -200,8 +209,10 @@ impl Func {
             }
         }
     }
+}
 
-    pub fn syntax_eq(&self, other: &Self) -> bool {
+impl SyntaxEq for Func {
+    fn syntax_eq(&self, other: &Self) -> bool {
         match (self.view(), other.view()) {
             (View::Z, View::Z) => true,
             (View::Z, _) => false,
@@ -296,7 +307,7 @@ impl fmt::Debug for Func {
 #[macro_export]
 macro_rules! func {
     (Z) => {$crate::func::Func::z()};
-    (S) => {$crate::func::Func::z()};
+    (S) => {$crate::func::Func::s()};
     ((int $value:tt)) => {$crate::func::Func::int($value)};
     ((rec $f:tt $g:tt)) => {
         $crate::func::Func::rec(func![$f], func![$g]).unwrap()

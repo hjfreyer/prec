@@ -1,151 +1,159 @@
 // CompAssoc(f, g, h, i): (f ~ ((g h) i)) -> (f ~ (g (h i)))
 //   Rev: (f ~ (g (h i))) -> (f ~ ((g h) i))
 
-use crate::func::Func;
+use crate::base::{Endpoints, SyntaxEq};
+use crate::func::{BadFunc, Func};
 use crate::rewrite;
 use std::fmt;
 
-// #[derive(Debug)]
-pub enum Goal {
-    Active(Endpoints),
-    Tactic(Tactic, Vec<Box<Goal>>),
+#[derive(Clone, Debug)]
+pub struct Tactic(View);
+
+#[derive(Clone, Debug)]
+pub enum View {
+    // (f, f', g) -> (f ~ f') -> ((f g) ~ (f' g))
+    CompLeft(Func, Func, Func),
+
+    // (f, g, g') -> (g ~ g') -> ((f g) ~ (f g'))
+    CompRight(Func, Func, Func),
 }
 
-impl Goal {
-    pub fn active_goal(&self) -> Option<Endpoints> {
-        match self {
-            Goal::Active(ep) => Some(ep.clone()),
-            Goal::Tactic(_, subgoals) => subgoals.iter().find_map(|sg| sg.active_goal()),
-        }
-    }
-
-    fn active_goal_mut(&mut self) -> Option<(&mut Goal)> {
-        match self {
-            Goal::Active(_) => Some(self),
-            Goal::Tactic(_, subgoals) => subgoals.iter_mut().find_map(|sg| sg.active_goal_mut()),
-        }
-    }
-
-    fn active_to_tactic(&mut self, t: Tactic) -> bool {
-        if let Goal::Active(Endpoints(start, end)) = self {
-            let Endpoints(t_start, t_end) = t.endpoints();
-            if !t_start.syntax_eq(start) || !t_end.syntax_eq(end) {
-                return false;
-            }
-            let subgoals = t
-                .subgoals()
-                .into_iter()
-                .map(|ep| Box::new(Goal::Active(ep)))
-                .collect();
-            *self = Goal::Tactic(t, subgoals);
-            true
-        } else {
-            panic!("active_to_tactic called on tactic")
-        }
-    }
-
-    pub fn apply(&mut self, tf: Factory) -> &mut Self {
-        let ag = self.active_goal_mut().unwrap();
-
-        if let Goal::Active(ep) = ag {
-            if let Some(t) = tf.from_endpoints(ep.clone()) {
-                if !ag.active_to_tactic(t) {
-                    panic!("from_endpoints did the wrong thing")
-                }
-            }
-            self
-        } else {
-            panic!("active_goal_mut broken")
-        }
-    }
-
-    pub fn apply_tactic(&mut self, t: Tactic) -> &mut Self {
-        self.active_goal_mut().unwrap().active_to_tactic(t);
-        self
-    }
-}
-
-impl fmt::Debug for Goal {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fn print(g: &Goal, indent: u32, fmt: &mut fmt::Formatter<'_>) -> Result<bool, fmt::Error> {
-            match g {
-                Goal::Active(Endpoints(s, e)) => {
-                    for _ in 0..indent {
-                        fmt.write_str("  ")?
-                    }
-                    fmt.write_fmt(format_args!("{:?} -> {:?} ACTIVE\n", s, e))?;
-                    Ok(true)
-                }
-                Goal::Tactic(t, sg) => {
-                    for _ in 0..indent {
-                        fmt.write_str("  ")?
-                    }
-                    let Endpoints(start, end) = t.endpoints();
-                    fmt.write_fmt(format_args!("{:?} -> {:?}, {}...\n", start, end, t.name()))?;
-                    for g in sg {
-                        if print(g, indent + 1, fmt)? {
-                            return Ok(true);
-                        }
-                    }
-                    Ok(false)
-                }
-            }
-        };
-        print(self, 0, fmt).map(|_| ())
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Endpoints(pub Func, pub Func);
-
-#[derive(Debug)]
-pub enum Tactic {
-    Refl(Func),
-    Symm(Func, Func),
+enum Side {
+    Left,
+    Right,
 }
 
 impl Tactic {
-    pub fn endpoints(&self) -> Endpoints {
-        match self {
-            Tactic::Refl(f) => Endpoints(f.clone(), f.clone()),
-            Tactic::Symm(f, g) => Endpoints(f.clone(), g.clone()),
-        }
+    pub fn view(&self) -> &View {
+        &self.0
     }
 
-    pub fn subgoals(&self) -> Vec<Endpoints> {
-        match self {
-            Tactic::Refl(_) => vec![],
-            Tactic::Symm(f, g) => vec![Endpoints(g.clone(), f.clone())],
-        }
+    pub fn into_view(self) -> View {
+        self.0
     }
+
+    // pub fn endpoints(&self) -> Endpoints {
+    //     match self.view() {
+    //         View::CompLeft(f, f_, g) => Endpoints(Func::comp(f.clone(), g.clone()).unwrap(), Func::comp(f_.clone(), g.clone()).unwrap()),
+    //         View::CompRight(f, g, g_) => Endpoints(Func::comp(f.clone(), g.clone()).unwrap(), Func::comp(f.clone(), g_.clone()).unwrap()),
+    //     }
+    // }
+
+    // pub fn subgoals(&self) -> Vec<Endpoints> {
+    //     match self {
+    //         View::CompLeft(f, f_, _) => vec![Endpoints(f.clone(), f_.clone())],
+    //         View::CompRight(f, g, g_) => vec![Endpoints(g.clone(), g_.clone())],
+    //     }
+    // }
 
     pub fn name(&self) -> &'static str {
-        match self {
-Tactic::Refl(_) => "refl",
-Tactic::Symm(_, _) => "symm",
+        match self.view() {
+            View::CompLeft(_, _, _) => "comp_left",
+            View::CompRight(_, _, _) => "comp_right",
         }
+    }
+
+    fn try_side(self, side: Side) -> Result<Endpoints<Func>, BadFunc> {
+        match self.into_view() {
+            View::CompLeft(f, f_, g) => match side {
+                Side::Left => Ok(Endpoints(f, f_)),
+                Side::Right => Ok(Endpoints(Func::comp(f, g.clone())?, Func::comp(f_, g)?)),
+            },
+            View::CompRight(f, g, g_) => match side {
+                Side::Left => Ok(Endpoints(g, g_)),
+                Side::Right => Ok(Endpoints(Func::comp(f.clone(), g)?, Func::comp(f, g_)?)),
+            },
+        }
+    }
+
+    pub fn lhs(self) -> Endpoints<Func> {
+        self.try_side(Side::Left).expect("validated on creation")
+    }
+
+    pub fn rhs(self) -> Endpoints<Func> {
+        self.try_side(Side::Right).expect("validated on creation")
     }
 }
 
-pub enum Factory {
-    Refl,
-    Symm,
+pub enum PathView {
+    // (p : (f ~ g)) -> (p ~ p)
+    Refl(rewrite::Path),
+    Concat(Box<Path>, Box<Path>),
+    Inverse(Box<Path>),
 }
 
-impl Factory {
-    pub fn from_endpoints(self, Endpoints(start, end): Endpoints) -> Option<Tactic> {
-        match self {
-            Factory::Refl => {
-                if start.syntax_eq(&end) {
-                    Some(Tactic::Refl(start))
-                } else {
-                    None
-                }
+pub struct Path(PathView);
+
+impl Path {
+    pub fn validate(v: PathView) -> Path {
+        if let PathView::Concat(p1, p2) = v {
+            let Endpoints(_, p1_end) = p1.endpoints();
+            let Endpoints(p2_start, _) = p2.endpoints();
+
+            if !p1.endpoints().end().syntax_eq(p2.endpoints().start()) {
+                panic!("vewwy bad")
             }
-            Factory::Symm => Some(Tactic::Symm(start, end)),
+            Path(PathView::Concat(p1, p2))
+        } else {
+            Path(v)
+        }
+    }
+
+    pub fn view(&self) -> &PathView {
+        &self.0
+    }
+
+    pub fn endpoints(&self) -> Endpoints<Endpoints<Func>> {
+        match self.view() {
+            PathView::Refl(rw) => Endpoints(rw.endpoints(), rw.endpoints()),
+            PathView::Concat(p1, p2) => {
+                let Endpoints(p1_start, _) = p1.endpoints();
+                let Endpoints(_, p2_end) = p2.endpoints();
+                Endpoints(p1_start, p2_end)
+            }
+            PathView::Inverse(p) => {
+                let Endpoints(start, end) = p.endpoints();
+                Endpoints(end, start)
+            }
         }
     }
 }
+
+// pub enum Factory {
+//     Refl,
+//     Symm,
+//     Rewrite(rewrite::Factory),
+//     // CompLeft,
+//     // CompRight,
+// }
+
+// impl Factory {
+//     pub fn from_endpoints(self, Endpoints(start, end): Endpoints) -> Option<Tactic> {
+//         match self {
+//             Factory::Refl => {
+//                 if start.syntax_eq(&end) {
+//                     Some(Tactic::Refl(start))
+//                 } else {
+//                     None
+//                 }
+//             }
+//             Factory::Symm => Some(Tactic::Symm(start, end)),
+//             Factory::Rewrite(rwf) => {
+//                 if let Some(rw) = rwf.for_func(&end) {
+// Some(                    Tactic::Rewrite(start, rw))
+//                 } else {
+//                     None
+//                 }
+//             }
+//         }
+//     }
+// }
+
+// pub fn reduce(func : &Func) -> Goal {
+//     if let Some(rw) = rewrite::Factory::CompAssocFwd.for_func(func) {
+//         Goal(func)
+//     }
+// }
 
 // trait Tactic {
 //     fn endpoints(&self) -> Endpoints;
