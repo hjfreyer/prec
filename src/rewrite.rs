@@ -12,9 +12,9 @@ pub enum View {
     CompDistributeEmpty(Func),
     CompDistributeStack(Func, Func, Func),
 
-    SkipStack(Func, Func),
-    SelectStack(Func, Func),
-    Stackify(Func),
+    SkipStack(u32, Func, Func),
+   SelectStack(Func, Func),
+    // Stackify(Func),
 
     EtaAbstractionLeft(Func),
     EtaReductionLeft(Func),
@@ -23,7 +23,7 @@ pub enum View {
 
     // // Recursion.
     RecElimZ(Func, Func, Func, Func),
-    // RecElimS,
+    RecElimS(Func, Func, Func, Func),
 
     // Steps in nested structures.
     CompLeft(Box<Rewrite>, Func),
@@ -83,33 +83,36 @@ impl Rewrite {
                     Func::comp(stack_cdr, g)?,
                 )?),
             },
-            View::SkipStack(stack_car, stack_cdr) => match side {
+            View::SkipStack(select, stack_car, stack_cdr) => match side {
                 Side::Left => {
-                    let skip_arity = stack_cdr.arity().out() + 1;
-                    Func::comp(Func::skip(skip_arity)?, Func::stack(stack_car, stack_cdr)?)
+                    let arity = stack_cdr.arity().out() + 1;
+                    Func::comp(Func::proj(select, arity)?, Func::stack(stack_car, stack_cdr)?)
                 }
-                Side::Right => Ok(stack_cdr),
+                Side::Right => {
+                    let arity = stack_cdr.arity().out() + 1;
+                    Func::comp(Func::proj(select - 1, arity - 1)?, stack_cdr)
+                }
             },
             View::SelectStack(stack_car, stack_cdr) => match side {
                 Side::Left => {
                     let select_arity = stack_cdr.arity().out() + 1;
                     Func::comp(
-                        Func::select(select_arity)?,
+                        Func::proj(0, select_arity)?,
                         Func::stack(stack_car, stack_cdr)?,
                     )
                 }
                 Side::Right => Ok(stack_car),
             },
-            View::Stackify(f) => match side {
-                Side::Left => Ok(f),
-                Side::Right => {
-                    let f_in = f.arity().r#in();
-                    Func::stack(
-                        f,
-                    Func::empty(f_in)
-                    )
-                }
-            },
+            // View::Stackify(f) => match side {
+            //     Side::Left => Ok(f),
+            //     Side::Right => {
+            //         let f_in = f.arity().r#in();
+            //         Func::stack(
+            //             f,
+            //         Func::empty(f_in)
+            //         )
+            //     }
+            // },
 
             View::EtaAbstractionLeft(g) => match side {
                 Side::Left => Ok(g),
@@ -146,6 +149,17 @@ impl Rewrite {
                     Func::stack(Func::comp(Func::z(), z_args)?, other_args)?,
                 )?),
                 Side::Right => Ok(Func::comp(z_case, other_args)?),
+            },
+            View::RecElimS(z_case, s_case, s_args, other_args) => match side {
+                Side::Left => Ok(Func::comp(
+                    Func::rec(z_case, s_case)?,
+                    Func::stack(Func::comp(Func::s(), s_args)?, other_args)?,
+                )?),
+                Side::Right => {
+                    let decremented_args = Func::stack(s_args, other_args)?;
+                    let rec_call = Func::comp(Func::rec(z_case, s_case.clone())?, decremented_args.clone())?;
+                    Ok(Func::comp(s_case, Func::stack(rec_call, decremented_args)?)?)
+                },
             },
 
             View::CompLeft(rw_f, g) => Ok(Func::comp(rw_f.try_side(side)?, g)?),
@@ -293,13 +307,17 @@ pub mod factory {
         }
     }
 
-    pub struct SkipStackFwd();
-    impl Factory for SkipStackFwd {
+    pub struct Projection();
+    impl Factory for Projection {
         fn for_lhs(&self, func: Func) -> Option<Rewrite> {
             let tag = func.tag().clone();
             if let FView::Comp(f, g) = func.into_view() {
-                if let (FView::Skip(_), FView::Stack(car, cdr)) = (f.into_view(), g.into_view()) {
-                    Some(Rewrite::validate(View::SkipStack(car, cdr), tag).unwrap())
+                if let (FView::Proj(select, arity), FView::Stack(car, cdr)) = (f.into_view(), g.into_view()) {
+                    if select == 0 {
+                        Some(Rewrite::validate(View::SelectStack(car, cdr), tag).unwrap())
+                    } else {
+                        Some(Rewrite::validate(View::SkipStack(select, car, cdr), tag).unwrap())
+                    }
                 } else {
                     None
                 }
@@ -309,21 +327,21 @@ pub mod factory {
         }
     }
 
-    pub struct SelectStackFwd();
-    impl Factory for SelectStackFwd {
-        fn for_lhs(&self, func: Func) -> Option<Rewrite> {
-            let tag = func.tag().clone();
-            if let FView::Comp(f, g) = func.into_view() {
-                if let (FView::Select(_), FView::Stack(car, cdr)) = (f.into_view(), g.into_view()) {
-                    Some(Rewrite::validate(View::SelectStack(car, cdr), tag).unwrap())
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        }
-    }
+    // pub struct SelectStackFwd();
+    // impl Factory for SelectStackFwd {
+    //     fn for_lhs(&self, func: Func) -> Option<Rewrite> {
+    //         let tag = func.tag().clone();
+    //         if let FView::Comp(f, g) = func.into_view() {
+    //             if let (FView::Select(_), FView::Stack(car, cdr)) = (f.into_view(), g.into_view()) {
+    //                 Some(Rewrite::validate(View::SelectStack(car, cdr), tag).unwrap())
+    //             } else {
+    //                 None
+    //             }
+    //         } else {
+    //             None
+    //         }
+    //     }
+    // }
 
     pub struct EtaReductionLeft();
     impl Factory for EtaReductionLeft {
@@ -331,7 +349,7 @@ pub mod factory {
             let tag = func.tag().clone();
             if let FView::Comp(f, g) = func.into_view() {
                 if f.syntax_eq(&Func::eye(g.arity().out())) {
-                    Some(Rewrite::validate(View::EtaReductionLeft(f), tag).unwrap())
+                    Some(Rewrite::validate(View::EtaReductionLeft(g), tag).unwrap())
                 } else {
                     None
                 }
@@ -359,30 +377,30 @@ pub mod factory {
 
     // Statements that necessarily have an arity-one output should be wrapped in a stack
     // when composed.
-    pub struct FixUnstackedComps();
-    impl Factory for FixUnstackedComps {
-        fn for_lhs(&self, func: Func) -> Option<Rewrite> {
-            let tag = func.tag().clone();
-            if let FView::Comp(f, g) = func.into_view() {
-                match g.view() {
-                    FView::Z | FView::S | FView::Select(_) | FView::Rec(_, _) => {
-let abstract_g = Rewrite::validate(View::Stackify(g), 
-                                    func::Tag::None).unwrap();
-                       Some(
-                                Rewrite::validate(
-                                    View::CompRight(f, Box::new(abstract_g)),
-                                    tag,
-                                )
-                                .unwrap(),
-                            )
-                    }
-                    _ => None
-                }
-            } else {
-                None
-            }
-        }
-    }
+//     pub struct FixUnstackedComps();
+//     impl Factory for FixUnstackedComps {
+//         fn for_lhs(&self, func: Func) -> Option<Rewrite> {
+//             let tag = func.tag().clone();
+//             if let FView::Comp(f, g) = func.into_view() {
+//                 match g.view() {
+//                     FView::Z | FView::S | FView::Select(_) | FView::Rec(_, _) => {
+// let abstract_g = Rewrite::validate(View::Stackify(g), 
+//                                     func::Tag::None).unwrap();
+//                        Some(
+//                                 Rewrite::validate(
+//                                     View::CompRight(f, Box::new(abstract_g)),
+//                                     tag,
+//                                 )
+//                                 .unwrap(),
+//                             )
+//                     }
+//                     _ => None
+//                 }
+//             } else {
+//                 None
+//             }
+//         }
+//     }
 
     pub struct RecElimZ();
     impl Factory for RecElimZ {
@@ -415,6 +433,56 @@ let abstract_g = Rewrite::validate(View::Stackify(g),
                                                             Some(
                                 Rewrite::validate(
                                     View::RecElimZ(z_case.clone(), s_case.clone(), z_args.clone(), other_args.clone()),
+                                    tag,
+                                )
+                                .unwrap(),
+                            )
+                            } else {
+                                None
+                            }
+                        }
+                        _=> None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+    }
+
+    pub struct RecElimS();
+    impl Factory for RecElimS {
+        fn for_lhs(&self, func: Func) -> Option<Rewrite> {
+            let tag = func.tag().clone();
+            if let FView::Comp(f, g) = func.into_view() {
+                if let (FView::Rec(z_case, s_case), FView::Stack(car, other_args)) = (f.view(), g.view()) {
+                    match car.view() {
+                        FView::S => {
+                            let s_eta_abstract = Rewrite::validate(
+                                View::EtaAbstractionRight(Func::s()),
+                                func::Tag::None,
+                            )
+                            .unwrap();
+                            let inside_stack = Rewrite::validate(
+                                View::StackCar(Box::new(s_eta_abstract), other_args.clone()),
+                                func::Tag::None,
+                            )
+                            .unwrap();
+                            Some(
+                                Rewrite::validate(
+                                    View::CompRight(f, Box::new(inside_stack)),
+                                    tag,
+                                )
+                                .unwrap(),
+                            )
+                        },
+                        FView::Comp(f, s_args) => {
+                            if let FView::S = f.view() {
+                                                            Some(
+                                Rewrite::validate(
+                                    View::RecElimS(z_case.clone(), s_case.clone(), s_args.clone(), other_args.clone()),
                                     tag,
                                 )
                                 .unwrap(),
@@ -490,7 +558,7 @@ let abstract_g = Rewrite::validate(View::Stackify(g),
                     .or_else(|| {
                         subfactory
                             .for_lhs(cdr.clone())
-                            .map(|rw_cdr| View::CompRight(car.clone(), Box::new(rw_cdr)))
+                            .map(|rw_cdr| {println!("{:?}", rw_cdr.clone()); View::StackCdr(car.clone(), Box::new(rw_cdr))})
                     }),
                 _ => None,
             }
@@ -506,16 +574,16 @@ let abstract_g = Rewrite::validate(View::Stackify(g),
                 ($($factory:expr),*) => {None$(.or_else(|| $factory.for_lhs(func.clone())))*}
             };
  reducers! {
+                Projection(),
+//                EtaReductionLeft(),
+                EtaReductionRight(),
                 CompAssocFwd(),
                 CompDistributeEmpty(),
                 CompDistributeStack(),
-                SkipStackFwd(),
-                SelectStackFwd(),
                 RecElimZ(),
-                EtaReductionLeft(),
-                EtaReductionRight(),
-                Recurse(*self),
-                FixUnstackedComps()
+                RecElimS(),
+                Recurse(*self)
+                // FixUnstackedComps()
             }
         }
     }

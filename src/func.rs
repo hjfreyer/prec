@@ -9,8 +9,7 @@ pub enum View {
     S,
 
     // Projection functions.
-    Select(u32),
-    Skip(u32),
+    Proj(u32, u32),
 
     // Stacking functions.
     Empty(u32),
@@ -41,15 +40,12 @@ pub enum Tag {
     None,
     Alias(&'static str),
     Int(u32),
-    Proj(u32, u32),
     Const(u32, Box<Func>),
     Applicaton(Box<Func>, Vec<Box<Func>>),
 }
 
 #[derive(Debug)]
 pub enum BadFunc {
-    InvalidSelect(u32),
-    InvalidSkip(u32),
     InvalidProjection(u32, u32),
     StackCarOutArityMustBe1(Func),
     StackArityMismatch(Func, Func),
@@ -68,21 +64,12 @@ impl Func {
     pub fn s() -> Func {
         Func(Rc::new(View::S), Tag::None)
     }
-
-    pub fn select(arity: u32) -> Result<Func, BadFunc> {
-        if arity < 1 {
-            Err(BadFunc::InvalidSelect(arity))
-        } else {
-            Ok(Func(Rc::new(View::Select(arity)), Tag::None))
+    
+    pub fn proj(select: u32, arity: u32) -> Result<Func, BadFunc> {
+        if arity <= select {
+            return Err(BadFunc::InvalidProjection(select, arity));
         }
-    }
-
-    pub fn skip(arity: u32) -> Result<Func, BadFunc> {
-        if arity < 1 {
-            Err(BadFunc::InvalidSkip(arity))
-        } else {
-            Ok(Func(Rc::new(View::Skip(arity)), Tag::None))
-        }
+        Ok(Func(Rc::new(View::Proj(select, arity)), Tag::None))
     }
 
     pub fn empty(arity_in: u32) -> Func {
@@ -106,7 +93,7 @@ impl Func {
     pub fn comp(f: Func, g: Func) -> Result<Func, BadFunc> {
         let Arity(_f_out, f_in) = f.arity();
         let Arity(g_out, _g_in) = g.arity();
-        if f_in != g_out {
+        if f_in != g_out { 
             Err(BadFunc::CompArityMismatch(f, g))
         } else {
             Ok(Func(Rc::new(View::Comp(f, g)), Tag::None))
@@ -130,21 +117,7 @@ impl Func {
     }
 
     // Helper constructors.
-    pub fn proj(select: u32, arity: u32) -> Result<Func, BadFunc> {
-        if arity <= select {
-            return Err(BadFunc::InvalidProjection(select, arity));
-        }
-        let mut res = Func::select(arity - select).expect("already checked arity");
-        for ii in 1..=select {
-            res = Func::comp(
-                res,
-                Func::skip(arity - select + ii).expect("already checked arity"),
-            )
-            .expect("already checked arity")
-            .set_tag(Tag::Proj(ii, arity - select + ii))
-        }
-        Ok(res)
-    }
+
 
     pub fn int(value: u32) -> Func {
         let mut res = Func::z().set_tag(Tag::Int(0));
@@ -224,8 +197,7 @@ impl Func {
         match self.view() {
             View::Z => Arity(1, 0),
             View::S => Arity(1, 1),
-            &View::Select(arity) => Arity(1, arity),
-            &View::Skip(arity) => Arity(arity - 1, arity),
+            &View::Proj(_, arity) => Arity(1, arity),
             &View::Empty(arity) => Arity(0, arity),
             View::Stack(_, cdr) => {
                 let Arity(cdr_out, cdr_in) = cdr.arity();
@@ -251,10 +223,8 @@ impl SyntaxEq for Func {
             (View::Z, _) => false,
             (View::S, View::S) => true,
             (View::S, _) => false,
-            (View::Select(s_arity), View::Select(o_arity)) => s_arity == o_arity,
-            (View::Select(_), _) => false,
-            (View::Skip(s_arity), View::Skip(o_arity)) => s_arity == o_arity,
-            (View::Skip(_), _) => false,
+            (View::Proj(s_select, s_arity), View::Proj(o_select, o_arity)) => s_select == o_select && s_arity == o_arity,
+            (View::Proj(_, _), _) => false,
             (View::Empty(s_arity), View::Empty(o_arity)) => s_arity == o_arity,
             (View::Empty(_), _) => false,
             (View::Stack(s_car, s_cdr), View::Stack(o_car, o_cdr)) => {
@@ -280,9 +250,6 @@ impl fmt::Debug for Func {
                     Tag::None => (),
                     Tag::Alias(name) => return fmt.write_str(name),
                     Tag::Int(i) => return fmt.write_fmt(format_args!("(int {})", i)),
-                    Tag::Proj(select, arity) => {
-                        return fmt.write_fmt(format_args!("(proj {} {})", select, arity))
-                    }
                     Tag::Const(arity, f) => {
                         fmt.write_fmt(format_args!("(const {} ", arity))?;
                         write(&*f, fmt)?;
@@ -306,8 +273,7 @@ impl fmt::Debug for Func {
             match func.view() {
                 View::Z => fmt.write_str("Z"),
                 View::S => fmt.write_str("S"),
-                &View::Select(arity) => fmt.write_fmt(format_args!("(select {})", arity)),
-                &View::Skip(arity) => fmt.write_fmt(format_args!("(skip {})", arity)),
+                &View::Proj(select, arity) => fmt.write_fmt(format_args!("(proj {} {})", select, arity)),
 
                 &View::Empty(arity) => fmt.write_fmt(format_args!("(empty {})", arity)),
                 View::Stack(car, cdr) => {

@@ -4,7 +4,7 @@ mod base;
 mod goal;
 mod rewrite;
 mod tactics;
-use crate::base::Endpoints;
+use crate::base::{Endpoints, SyntaxEq};
 use crate::func::{Func, View};
 use crate::rewrite::factory::Factory;
 use crate::rewrite::Rewrite;
@@ -1693,7 +1693,6 @@ fn main() {
 
 
         let _t4 = (not Z);
-        let _t8 = (comp not Z);
         let _t5 = (not S);
         let _t6 = (not (const 5 Z));
         let _t7 = (not (not (const 1 (int 5))));
@@ -1706,14 +1705,25 @@ fn main() {
 
     //    let g = goal::HorizontalPath::new(func![(is_even double)], func![(const 1 (int 1))]);
 
-    let reduction = std::iter::successors(Some(_t8), |a| {
-        rewrite::factory::Reduce()
-            .for_lhs(a.clone())
-            .map(|rw| {println!("{:?}", rw); rw.rhs()})
-    }).take(100);
-    for r in reduction {
-        println!("{:?}", r)
+    let mut expr = _t7;
+     println!("{:?}", expr);
+    while let Some(rw) = rewrite::factory::Reduce().for_lhs(expr.clone()) {
+        println!("{:?}", rw);
+
+        if !expr.syntax_eq(&rw.clone().lhs()) { 
+            panic!("ya done goofed")
+        }
+        expr = rw.rhs();
+         println!("{:?}", expr);
     }
+    // let reduction = std::iter::successors(Some(_t6), |a| {
+    //     rewrite::factory::Reduce()
+    //         .for_lhs(a.clone())
+    //         .map(|rw| {println!("{:?}", rw); rw.rhs()})
+    // }).take(100);
+    // for r in reduction {
+    //     println!("{:?}", r)
+    // }
 
     // let mut g = tactics::Goal::Active(tactics::Endpoints(func![(is_even double)], func![(const 1 (int 1))]));
     // println!("{:?}", g);
