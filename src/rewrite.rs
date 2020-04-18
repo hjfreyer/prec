@@ -25,7 +25,7 @@ pub enum View {
 
     // Recursion.
     RecElimZ(Func, Func, Func, Func),
-    RecElimS(Func, Func, Func, Func),
+    RecElimS(Func, Func, Func, Func, Func),
 
     // Induction.
     Induction(Func, Func, Box<Path>),
@@ -142,13 +142,16 @@ impl Rewrite {
                 )?),
                 Side::Right => Ok(Func::comp(z_case, other_args)?),
             },
-            View::RecElimS(z_case, s_case, s_args, other_args) => match side {
+            View::RecElimS(z_case, s_case, s_args_car, s_args_cdr, other_args) => match side {
                 Side::Left => Ok(Func::comp(
                     Func::rec(z_case, s_case)?,
-                    Func::stack(Func::comp(Func::s(), s_args)?, other_args)?,
+                    Func::stack(
+                        Func::comp(Func::s(), Func::stack(s_args_car, s_args_cdr)?)?,
+                        other_args,
+                    )?,
                 )?),
                 Side::Right => {
-                    let decremented_args = Func::stack(s_args, other_args)?;
+                    let decremented_args = Func::stack(s_args_car, other_args)?;
                     let rec_call =
                         Func::comp(Func::rec(z_case, s_case.clone())?, decremented_args.clone())?;
                     Ok(Func::comp(
@@ -392,13 +395,16 @@ pub mod factory {
                             )
                         }
                         FView::Comp(f, s_args) => {
-                            if let FView::S = f.view() {
+                            if let (FView::S, FView::Stack(s_args_car, s_args_cdr)) =
+                                (f.view(), s_args.view())
+                            {
                                 Some(
                                     Rewrite::validate(
                                         View::RecElimS(
                                             z_case.clone(),
                                             s_case.clone(),
-                                            s_args.clone(),
+                                            s_args_car.clone(),
+                                            s_args_cdr.clone(),
                                             other_args.clone(),
                                         ),
                                         tag,

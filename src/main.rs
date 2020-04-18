@@ -1711,6 +1711,8 @@ fn main() {
         println!("{:?}", rw);
 
         if !expr.syntax_eq(&rw.clone().lhs()) {
+            println!("wanted to match:   {:#?}", expr);
+            println!("reduction was for: {:#?}", &rw.clone().lhs());
             panic!("ya done goofed")
         }
         expr = rw.rhs();
@@ -1820,3 +1822,38 @@ fn main() {
     //                     //        .simplify()
     //     );
 }
+
+// (((int 0) * !2) * <((rec (int 1) ((int 0) * !2)) * (stack (proj 0 1) (empty 1))); (stack (proj 0 1) (empty 1))>)
+
+// (comp
+//     (rec (comp S (stack Z (empty 0))) (comp Z (empty 2)))
+//     (stack
+//         (comp S (stack (proj 0 1) (empty 1)))
+//         (empty 1)))
+
+// (comp (comp Z (empty 2))
+//     (stack
+//         (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (stack (proj 0 1) (empty 1)) (empty 1)))
+//         (stack (stack (proj 0 1) (empty 1)) (empty 1))))
+
+// wanted to match:
+// (comp
+//     (rec (comp S (stack Z (empty 0))) (comp Z (empty 2)))
+//     (stack
+//         (comp
+//             (rec (comp S (stack Z (empty 0))) (comp Z (empty 2)))
+//             (stack
+//                 (comp S (stack (comp (comp S (stack (comp S (stack (comp S (stack (comp S (stack Z (empty 0))) (empty 0))) (empty 0))) (empty 0))) (empty 1)) (comp (empty 0) (empty 1))))
+//                 (empty 1)))
+//         (empty 1)))
+
+// reduction was for:
+// (comp
+//     (rec (comp S (stack Z (empty 0))) (comp Z (empty 2)))
+//     (stack
+//         (comp
+//             (rec (comp S (stack Z (empty 0))) (comp Z (empty 2)))
+//             (stack
+//                 (comp S (stack (comp (comp S (stack (comp S (stack (comp S (stack (comp S (stack Z (empty 0))) (empty 0))) (empty 0))) (empty 0))) (empty 1)) (empty 1)))
+//                 (empty 1)))
+//     (empty 1)))
