@@ -39,9 +39,6 @@ impl Arity {
 pub enum Tag {
     None,
     Alias(&'static str),
-    Int(u32),
-    Const(u32, Box<Func>),
-    Applicaton(Box<Func>, Vec<Box<Func>>),
 }
 
 #[derive(Debug)]
@@ -50,6 +47,7 @@ pub enum BadFunc {
     StackCarOutArityMustBe1(Func),
     StackArityMismatch(Func, Func),
     CompArityMismatch(Func, Func),
+    CompRightMustBeCompOrStack(Func, Func),
     RecZCaseOutArityMustBe1(Func),
     RecSCaseOutArityMustBe1(Func),
     RecArityMismatch(Func, Func),
@@ -64,7 +62,7 @@ impl Func {
     pub fn s() -> Func {
         Func(Rc::new(View::S), Tag::None)
     }
-    
+
     pub fn proj(select: u32, arity: u32) -> Result<Func, BadFunc> {
         if arity <= select {
             return Err(BadFunc::InvalidProjection(select, arity));
@@ -91,9 +89,14 @@ impl Func {
     }
 
     pub fn comp(f: Func, g: Func) -> Result<Func, BadFunc> {
+        match g.view() {
+            View::Empty(_) | View::Stack(_, _) | View::Comp(_, _) => (),
+            _ => return Err(BadFunc::CompRightMustBeCompOrStack(f, g)),
+        }
+
         let Arity(_f_out, f_in) = f.arity();
         let Arity(g_out, _g_in) = g.arity();
-        if f_in != g_out { 
+        if f_in != g_out {
             Err(BadFunc::CompArityMismatch(f, g))
         } else {
             Ok(Func(Rc::new(View::Comp(f, g)), Tag::None))
@@ -117,20 +120,16 @@ impl Func {
     }
 
     // Helper constructors.
-
-
     pub fn int(value: u32) -> Func {
-        let mut res = Func::z().set_tag(Tag::Int(0));
+        let mut res = Func::z();
         for ii in 0..value {
-            res = Func::apply(Func::s(), &[res])
-                .unwrap()
-                .set_tag(Tag::Int(ii + 1));
+            res = Func::apply(Func::s(), &[res]).unwrap();
         }
         res
     }
 
     pub fn mk_const(arity: u32, f: Func) -> Result<Func, BadFunc> {
-        Ok(Func::comp(f.clone(), Func::empty(arity))?.set_tag(Tag::Const(arity, Box::new(f))))
+        Func::comp(f.clone(), Func::empty(arity))
     }
 
     pub fn apply(f: Func, gs: &[Func]) -> Result<Func, BadFunc> {
@@ -144,10 +143,7 @@ impl Func {
             g_stack = Func::stack(g.clone(), g_stack)?
         }
 
-        let res = Func::comp(f.clone(), g_stack)?;
-
-        let boxed_gs = gs.iter().map(|g| Box::new(g.clone())).collect();
-        Ok(res.set_tag(Tag::Applicaton(Box::new(f), boxed_gs)))
+        Func::comp(f.clone(), g_stack)
     }
 
     pub fn eye(arity: u32) -> Func {
@@ -180,7 +176,6 @@ impl Func {
     }
 
     // Instance methods.
-
     pub fn view(&self) -> &View {
         &*self.0
     }
@@ -214,6 +209,30 @@ impl Func {
             }
         }
     }
+
+    pub fn as_const(&self) -> Option<(Func, u32)> {
+        if let View::Comp(f, g) = self.view() {
+            if let &View::Empty(arity) = g.view() {
+                return Some((f.clone(), arity));
+            }
+        }
+        None
+    }
+
+    pub fn as_int(&self) -> Option<(u32, Option<u32>)> {
+        if let Some((f, arity)) = self.as_const() {
+            return f.as_int().map(|(value, _)| (value, Some(arity)));
+        }
+        if let View::Z = self.view() {
+            return Some((0, None));
+        }
+        if let View::Comp(f, g) = self.view() {
+            if let (View::S, View::Stack(car, cdr)) = (f.view(), g.view()) {
+                return car.as_int().map(|(value, arity)| (value + 1, arity));
+            }
+        }
+        None
+    }
 }
 
 impl SyntaxEq for Func {
@@ -223,7 +242,9 @@ impl SyntaxEq for Func {
             (View::Z, _) => false,
             (View::S, View::S) => true,
             (View::S, _) => false,
-            (View::Proj(s_select, s_arity), View::Proj(o_select, o_arity)) => s_select == o_select && s_arity == o_arity,
+            (View::Proj(s_select, s_arity), View::Proj(o_select, o_arity)) => {
+                s_select == o_select && s_arity == o_arity
+            }
             (View::Proj(_, _), _) => false,
             (View::Empty(s_arity), View::Empty(o_arity)) => s_arity == o_arity,
             (View::Empty(_), _) => false,
@@ -249,31 +270,32 @@ impl fmt::Debug for Func {
                 match tag {
                     Tag::None => (),
                     Tag::Alias(name) => return fmt.write_str(name),
-                    Tag::Int(i) => return fmt.write_fmt(format_args!("(int {})", i)),
-                    Tag::Const(arity, f) => {
-                        fmt.write_fmt(format_args!("(const {} ", arity))?;
-                        write(&*f, fmt)?;
-                        return fmt.write_str(")");
+                }
+
+                if let Some((f, arity)) = func.as_const() {
+                    fmt.write_fmt(format_args!("(const {} ", arity))?;
+                    write(&f, fmt)?;
+                    return fmt.write_str(")");
+                }
+
+                if let Some((i, arity)) = func.as_int() {
+                    if let Some(arity) = arity {
+                        return fmt.write_fmt(format_args!("(const {} (int {}))", arity, i));
+                    } else {
+                        return fmt.write_fmt(format_args!("(int {})", i));
                     }
-                    Tag::Applicaton(f, gs) => {
-                        if gs.is_empty() {
-                            panic!("misleading application")
-                        }
-                        fmt.write_str("(")?;
-                        write(&*f, fmt)?;
-                        for g in gs {
-                            fmt.write_str(" ")?;
-                            write(&*g, fmt)?;
-                        }
-                        return fmt.write_str(")");
-                    }
+                    // fmt.write_fmt(format_args!("(const {} ", arity))?;
+                    // write(&f, fmt)?;
+                    // return fmt.write_str(")");
                 }
             }
 
             match func.view() {
                 View::Z => fmt.write_str("Z"),
                 View::S => fmt.write_str("S"),
-                &View::Proj(select, arity) => fmt.write_fmt(format_args!("(proj {} {})", select, arity)),
+                &View::Proj(select, arity) => {
+                    fmt.write_fmt(format_args!("(proj {} {})", select, arity))
+                }
 
                 &View::Empty(arity) => fmt.write_fmt(format_args!("(empty {})", arity)),
                 View::Stack(car, cdr) => {
@@ -334,7 +356,3 @@ macro_rules! func_let {
         )*
     };
 }
-
-// (comp (comp (comp (select 1) (skip 2)) (skip 3)) (stack Z (stack (comp S Z) (stack (comp S (comp S Z)) (empty 0)))))
-// (comp (comp (select 1) (skip 2)) (comp (skip 3) (stack Z (stack (comp S Z) (stack (comp S (comp S Z)) (empty 0))))))
-// (comp (comp (select 1) (skip 2)) (stack (comp S Z) (stack (comp S (comp S Z)) (empty 0)))))

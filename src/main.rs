@@ -1706,15 +1706,15 @@ fn main() {
     //    let g = goal::HorizontalPath::new(func![(is_even double)], func![(const 1 (int 1))]);
 
     let mut expr = _t7;
-     println!("{:?}", expr);
+    println!("{:?}", expr);
     while let Some(rw) = rewrite::factory::Reduce().for_lhs(expr.clone()) {
         println!("{:?}", rw);
 
-        if !expr.syntax_eq(&rw.clone().lhs()) { 
+        if !expr.syntax_eq(&rw.clone().lhs()) {
             panic!("ya done goofed")
         }
         expr = rw.rhs();
-         println!("{:?}", expr);
+        println!("{:?}", expr);
     }
     // let reduction = std::iter::successors(Some(_t6), |a| {
     //     rewrite::factory::Reduce()
