@@ -210,6 +210,16 @@ impl Func {
         }
     }
 
+    pub fn unwrap_singleton(&self) -> Func {
+        if let View::Stack(car, cdr) = self.view() {
+            if let View::Empty(_) = cdr.view() {
+                return car.unwrap_singleton();
+            }
+        }
+
+        self.clone()
+    }
+
     pub fn as_const(&self) -> Option<(Func, u32)> {
         if let View::Comp(f, g) = self.view() {
             if let &View::Empty(arity) = g.view() {
@@ -229,6 +239,29 @@ impl Func {
         if let View::Comp(f, g) = self.view() {
             if let (View::S, View::Stack(car, cdr)) = (f.view(), g.view()) {
                 return car.as_int().map(|(value, arity)| (value + 1, arity));
+            }
+        }
+        None
+    }
+
+    pub fn as_application(&self) -> Option<(Func, Vec<Func>)> {
+        fn stack_to_backwards_vec(func: &Func) -> Option<Vec<Func>> {
+            match func.view() {
+                View::Empty(_) => Some(vec![]),
+                View::Stack(car, cdr) => stack_to_backwards_vec(&*cdr).map(|mut cdr_vec| {
+                    cdr_vec.push(car.clone());
+                    cdr_vec
+                }),
+                _ => None,
+            }
+        }
+
+        if let View::Comp(f, g) = self.view() {
+            if let Some(backwards_gs) = stack_to_backwards_vec(g) {
+                if backwards_gs.is_empty() {
+                    return None;
+                }
+                return Some((f.clone(), backwards_gs.into_iter().rev().collect()));
             }
         }
         None
@@ -271,6 +304,7 @@ impl fmt::Debug for Func {
                     Tag::None => (),
                     Tag::Alias(name) => return fmt.write_str(name),
                 }
+                let func = func.unwrap_singleton();
 
                 if let Some((f, arity)) = func.as_const() {
                     fmt.write_fmt(format_args!("(const {} ", arity))?;
@@ -284,9 +318,15 @@ impl fmt::Debug for Func {
                     } else {
                         return fmt.write_fmt(format_args!("(int {})", i));
                     }
-                    // fmt.write_fmt(format_args!("(const {} ", arity))?;
-                    // write(&f, fmt)?;
-                    // return fmt.write_str(")");
+                }
+                if let Some((f, gs)) = func.as_application() {
+                    fmt.write_str("(")?;
+                    write(&f, fmt)?;
+                    for g in gs {
+                        fmt.write_str(" ")?;
+                        write(&g, fmt)?;
+                    }
+                    return fmt.write_str(")");
                 }
             }
 
