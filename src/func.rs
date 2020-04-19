@@ -165,10 +165,14 @@ impl Func {
 
     pub fn s_eye(arity: u32) -> Func {
         let mut res = Func::empty(arity);
-        for i in (0..arity).rev() {
+        for i in (1..arity).rev() {
             res = Func::stack(Func::proj(i, arity).unwrap(), res).unwrap()
         }
-        res
+        Func::stack(
+            Func::apply(Func::s(), &[Func::proj(0, arity).unwrap()]).unwrap(),
+            res,
+        )
+        .unwrap()
     }
 
     pub fn set_tag(self, tag: Tag) -> Func {

@@ -486,6 +486,7 @@ pub mod factory {
 #[derive(Debug, Clone)]
 pub enum PathView {
     Refl(Func),
+    Rewrite(Rewrite),
     Concat(Box<Path>, Box<Path>),
     Inverse(Box<Path>),
 }
@@ -524,6 +525,22 @@ impl Path {
                 let Endpoints(start, end) = p.endpoints();
                 Endpoints(end, start)
             }
+            PathView::Rewrite(rw) => Endpoints(rw.clone().lhs(), rw.clone().rhs()),
         }
+    }
+}
+use crate::rewrite::factory::Factory;
+
+// Returns a path starting with f and leading to a reduced form.
+pub fn reduce_fully(f: Func) -> Path {
+    if let Some(rw) = factory::Reduce().for_lhs(f.clone()) {
+        let rhs = rw.clone().rhs();
+        let rw_path = Path::validate(PathView::Rewrite(rw));
+        Path::validate(PathView::Concat(
+            Box::new(rw_path),
+            Box::new(reduce_fully(rhs)),
+        ))
+    } else {
+        Path::validate(PathView::Refl(f))
     }
 }

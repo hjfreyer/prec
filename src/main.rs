@@ -8,6 +8,8 @@ use crate::base::{Endpoints, SyntaxEq};
 use crate::func::{Func, View};
 use crate::rewrite::factory::Factory;
 use crate::rewrite::Rewrite;
+use im;
+use im::vector::Vector;
 // #![feature(
 //     box_syntax,
 //     box_patterns,
@@ -1705,19 +1707,48 @@ fn main() {
 
     //    let g = goal::HorizontalPath::new(func![(is_even double)], func![(const 1 (int 1))]);
 
-    let mut expr = _t7;
-    println!("{:?}", expr);
-    while let Some(rw) = rewrite::factory::Reduce().for_lhs(expr.clone()) {
-        println!("{:?}", rw);
+    //    let mut g = im::vector![Endpoints(_t4, func![(int 1)])];
+    let mut g = im::vector![Endpoints(func![(is_even double)], func![(const 1 (int 1))])];
 
-        if !expr.syntax_eq(&rw.clone().lhs()) {
-            println!("wanted to match:   {:#?}", expr);
-            println!("reduction was for: {:#?}", &rw.clone().lhs());
-            panic!("ya done goofed")
+    let tax = vec![
+        //        tactics::Tactic::Ident,
+        //tactics::Tactic::Cut(func![(rec (int 1) ((not not) (proj 0 2)))]),
+        tactics::Tactic::Induction(func![((not not) (proj 0 2))]),
+        tactics::Tactic::ReduceRight,
+        tactics::Tactic::Symm,
+        tactics::Tactic::ReduceRight,
+        tactics::Tactic::Ident,
+        tactics::Tactic::Symm,
+        tactics::Tactic::ReduceRight,
+        tactics::Tactic::Induction(func![(proj 0 2)]),
+        tactics::Tactic::ReduceRight,
+        tactics::Tactic::Symm,
+        tactics::Tactic::ReduceRight,
+        tactics::Tactic::Ident,
+        // tactics::ContextTransformFactoryFamily::PushRefl,
+    ];
+    println!("{:?}", tactics::ContextSpecWrapper(g.clone()));
+    for t in tax.into_iter() {
+        for op in t.for_goal(&g) {
+            g = op.reverse(g.clone()).unwrap();
+            println!("{:?}", tactics::ContextSpecWrapper(g.clone()));
         }
-        expr = rw.rhs();
-        println!("{:?}", expr);
     }
+    // println!("{:?}", g);
+
+    // let mut expr = _t7;
+    // println!("{:?}", expr);
+    // while let Some(rw) = rewrite::factory::Reduce().for_lhs(expr.clone()) {
+    //     println!("{:?}", rw);
+
+    //     if !expr.syntax_eq(&rw.clone().lhs()) {
+    //         println!("wanted to match:   {:#?}", expr);
+    //         println!("reduction was for: {:#?}", &rw.clone().lhs());
+    //         panic!("ya done goofed")
+    //     }
+    //     expr = rw.rhs();
+    //     println!("{:?}", expr);
+    // }
     // let reduction = std::iter::successors(Some(_t6), |a| {
     //     rewrite::factory::Reduce()
     //         .for_lhs(a.clone())
