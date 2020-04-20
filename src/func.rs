@@ -36,7 +36,7 @@ impl Arity {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum Tag {
     None,
     Alias(&'static str),
