@@ -2,6 +2,7 @@
 mod func;
 mod base;
 mod goal;
+mod metapath;
 mod rewrite;
 mod tactics;
 use crate::base::{Endpoints, SyntaxEq};
@@ -1710,30 +1711,33 @@ fn main() {
     //    let mut g = im::vector![Endpoints(_t4, func![(int 1)])];
     let mut g = im::vector![Endpoints(func![(is_even double)], func![(const 1 (int 1))])];
 
-    let tax = vec![
-        //        tactics::Tactic::Ident,
-        //tactics::Tactic::Cut(func![(rec (int 1) ((not not) (proj 0 2)))]),
-        tactics::Tactic::Induction(func![((not not) (proj 0 2))]),
-        tactics::Tactic::ReduceRight,
-        tactics::Tactic::Symm,
-        tactics::Tactic::ReduceRight,
-        tactics::Tactic::Ident,
-        tactics::Tactic::Symm,
-        tactics::Tactic::ReduceRight,
-        tactics::Tactic::Induction(func![(proj 0 2)]),
-        tactics::Tactic::ReduceRight,
-        tactics::Tactic::Symm,
-        tactics::Tactic::ReduceRight,
-        tactics::Tactic::Ident,
-        // tactics::ContextTransformFactoryFamily::PushRefl,
-    ];
-    println!("{:?}", tactics::ContextSpecWrapper(g.clone()));
-    for t in tax.into_iter() {
-        for op in t.for_goal(&g) {
-            g = op.reverse(g.clone()).unwrap();
-            println!("{:?}", tactics::ContextSpecWrapper(g.clone()));
-        }
-    }
+    // let tax = vec![
+    //     //        tactics::Tactic::Ident,
+    //     //tactics::Tactic::Cut(func![(rec (int 1) ((not not) (proj 0 2)))]),
+    //     tactics::Tactic::Induction(func![((not not) (proj 0 2))]),
+    //     // tactics::Tactic::ReduceRight,
+    //     // tactics::Tactic::Symm,
+    //     // tactics::Tactic::ReduceRight,
+    //     // tactics::Tactic::Ident,
+    //     // tactics::Tactic::Symm,
+    //     // tactics::Tactic::ReduceRight,
+    //     // tactics::Tactic::Induction(func![(proj 0 2)]),
+    //     // tactics::Tactic::ReduceRight,
+    //     // tactics::Tactic::Symm,
+    //     // tactics::Tactic::ReduceRight,
+    //     // tactics::Tactic::Ident,
+    //     // tactics::Tactic::ReduceRight,
+    //     // tactics::ContextTransformFactoryFamily::PushRefl,
+    // ];
+    // println!("{:?}", tactics::ContextSpecWrapper(g.clone()));
+    // for t in tax.into_iter() {
+    //     for op in t.for_goal(&g) {
+    //         g = op.reverse(g.clone()).unwrap();
+    //         println!("{:?}", tactics::ContextSpecWrapper(g.clone()));
+    //     }
+    // }
+
+    // println!("got here");
     // println!("{:?}", g);
 
     // let mut expr = _t7;

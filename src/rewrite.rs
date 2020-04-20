@@ -2,9 +2,10 @@ use crate::base::{Endpoints, SyntaxEq};
 use crate::func;
 use func::View as FView;
 use func::{BadFunc, Func};
+use std::rc::Rc;
 
 #[derive(Clone, Debug)]
-pub struct Rewrite(View, func::Tag);
+pub struct Rewrite(Rc<View>, func::Tag);
 
 #[derive(Clone, Debug)]
 pub enum View {
@@ -28,15 +29,20 @@ pub enum View {
     RecElimS(Func, Func, Func, Func, Func),
 
     // Induction.
-    Induction(Func, Func, Box<Path>),
+    Induction(Func, Func, Rewrite),
 
     // Steps in nested structures.
-    CompLeft(Box<Rewrite>, Func),
-    CompRight(Func, Box<Rewrite>),
-    StackCar(Box<Rewrite>, Func),
-    StackCdr(Func, Box<Rewrite>),
-    RecZ(Box<Rewrite>, Func),
-    RecS(Func, Box<Rewrite>),
+    CompLeft(Rewrite, Func),
+    CompRight(Func, Rewrite),
+    StackCar(Rewrite, Func),
+    StackCdr(Func, Rewrite),
+    RecZ(Rewrite, Func),
+    RecS(Func, Rewrite),
+
+    // Groupoid.
+    Refl(Func),
+    Reverse(Rewrite),
+    Concat(Rewrite, Rewrite),
 }
 
 enum Side {
@@ -49,12 +55,13 @@ impl Rewrite {
         &self.0
     }
 
+    // Deprecate this.
     pub fn into_view(self) -> View {
-        self.0
+        self.view().clone()
     }
 
     pub fn validate(view: View, tag: func::Tag) -> Result<Rewrite, BadFunc> {
-        let res = Rewrite(view, tag);
+        let res = Rewrite(Rc::new(view), tag);
         res.clone().try_side(Side::Left)?;
         res.clone().try_side(Side::Right)?;
         Ok(res)
@@ -189,6 +196,22 @@ impl Rewrite {
             View::StackCdr(car, rw_cdr) => Ok(Func::stack(car, rw_cdr.try_side(side)?)?),
             View::RecZ(rw_z_case, s_case) => Ok(Func::rec(rw_z_case.try_side(side)?, s_case)?),
             View::RecS(z_case, rw_s_case) => Ok(Func::rec(z_case, rw_s_case.try_side(side)?)?),
+
+            // Groupoid
+            View::Refl(f) => Ok(f),
+            View::Reverse(rw) => rw.try_side(match side {
+                Side::Left => Side::Right,
+                Side::Right => Side::Left,
+            }),
+            View::Concat(p1, p2) => {
+                if !p1.endpoints().end().syntax_eq(p2.endpoints().start()) {
+                    panic!("put an error here")
+                }
+                match side {
+                    Side::Left => Ok(p1.lhs()),
+                    Side::Right => Ok(p2.rhs()),
+                }
+            }
         }
     }
 
@@ -201,6 +224,10 @@ impl Rewrite {
 
     pub fn rhs(self) -> Func {
         self.try_side(Side::Right).expect("validated on creation")
+    }
+
+    pub fn endpoints(&self) -> Endpoints<Func> {
+        Endpoints(self.clone().lhs(), self.clone().rhs())
     }
 }
 
@@ -220,6 +247,7 @@ pub mod factory {
             let tag = func.tag().clone();
             if let FView::Comp(fg, h) = func.into_view() {
                 if let FView::Comp(f, g) = fg.into_view() {
+//                    println!("comp: {:?} {:?} {:?}", f, g, h);
                     Some(Rewrite::validate(View::CompAssoc(f, g, h), tag).unwrap())
                 } else {
                     None
@@ -331,14 +359,11 @@ pub mod factory {
                             )
                             .unwrap();
                             let inside_stack = Rewrite::validate(
-                                View::StackCar(Box::new(z_eta_abstract), other_args.clone()),
+                                View::StackCar(z_eta_abstract, other_args.clone()),
                                 func::Tag::None,
                             )
                             .unwrap();
-                            Some(
-                                Rewrite::validate(View::CompRight(f, Box::new(inside_stack)), tag)
-                                    .unwrap(),
-                            )
+                            Some(Rewrite::validate(View::CompRight(f, inside_stack), tag).unwrap())
                         }
                         FView::Comp(f, z_args) => {
                             if let FView::Z = f.view() {
@@ -385,14 +410,11 @@ pub mod factory {
                             )
                             .unwrap();
                             let inside_stack = Rewrite::validate(
-                                View::StackCar(Box::new(s_eta_abstract), other_args.clone()),
+                                View::StackCar(s_eta_abstract, other_args.clone()),
                                 func::Tag::None,
                             )
                             .unwrap();
-                            Some(
-                                Rewrite::validate(View::CompRight(f, Box::new(inside_stack)), tag)
-                                    .unwrap(),
-                            )
+                            Some(Rewrite::validate(View::CompRight(f, inside_stack), tag).unwrap())
                         }
                         FView::Comp(f, s_args) => {
                             if let (FView::S, FView::Stack(s_args_car, s_args_cdr)) =
@@ -431,28 +453,29 @@ pub mod factory {
         fn for_lhs(&self, func: Func) -> Option<Rewrite> {
             let Recurse(subfactory) = self;
             let tag = func.tag();
+                        println!("here: {:?}", func.view());
+
             match func.view() {
                 FView::Comp(f, g) => None
                     .or_else(|| {
                         subfactory
                             .for_lhs(f.clone())
-                            .map(|rw_f| View::CompLeft(Box::new(rw_f), g.clone()))
+                            .map(|rw_f| View::CompLeft(rw_f, g.clone()))
                     })
                     .or_else(|| {
                         subfactory
                             .for_lhs(g.clone())
-                            .map(|rw_g| View::CompRight(f.clone(), Box::new(rw_g)))
+                            .map(|rw_g| View::CompRight(f.clone(), rw_g))
                     }),
                 FView::Stack(car, cdr) => None
                     .or_else(|| {
                         subfactory
                             .for_lhs(car.clone())
-                            .map(|rw_car| View::StackCar(Box::new(rw_car), cdr.clone()))
+                            .map(|rw_car| View::StackCar(rw_car, cdr.clone()))
                     })
                     .or_else(|| {
                         subfactory.for_lhs(cdr.clone()).map(|rw_cdr| {
-                            println!("{:?}", rw_cdr.clone());
-                            View::StackCdr(car.clone(), Box::new(rw_cdr))
+                            View::StackCdr(car.clone(), rw_cdr)
                         })
                     }),
                 _ => None,
@@ -466,7 +489,7 @@ pub mod factory {
     impl Factory for Reduce {
         fn for_lhs(&self, func: Func) -> Option<Rewrite> {
             macro_rules! reducers {
-                ($($factory:expr),*) => {None$(.or_else(|| $factory.for_lhs(func.clone())))*}
+                ($($factory:expr),*) => {None$(.or_else(|| {println!("foo {}", stringify!($factory));$factory.for_lhs(func.clone())}))*}
             };
             reducers! {
                 Projection(),
@@ -483,64 +506,65 @@ pub mod factory {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum PathView {
-    Refl(Func),
-    Rewrite(Rewrite),
-    Concat(Box<Path>, Box<Path>),
-    Inverse(Box<Path>),
-}
+// #[derive(Debug, Clone)]
+// pub enum PathView {
+//     Refl(Func),
+//     Rewrite(Rewrite),
+//     Concat(Box<Path>, Box<Path>),
+//     Inverse(Box<Path>),
+// }
 
-#[derive(Debug, Clone)]
-pub struct Path(PathView);
+// #[derive(Debug, Clone)]
+// pub struct Path(PathView);
 
-impl Path {
-    pub fn validate(v: PathView) -> Path {
-        if let PathView::Concat(p1, p2) = v {
-            let Endpoints(_, p1_end) = p1.endpoints();
-            let Endpoints(p2_start, _) = p2.endpoints();
+// impl Path {
+//     pub fn validate(v: PathView) -> Path {
+//         if let PathView::Concat(p1, p2) = v {
+//             let Endpoints(_, p1_end) = p1.endpoints();
+//             let Endpoints(p2_start, _) = p2.endpoints();
 
-            if !p1_end.syntax_eq(&p2_start) {
-                panic!("vewwy bad")
-            }
-            Path(PathView::Concat(p1, p2))
-        } else {
-            Path(v)
-        }
-    }
+//             if !p1_end.syntax_eq(&p2_start) {
+//                 panic!("vewwy bad")
+//             }
+//             Path(PathView::Concat(p1, p2))
+//         } else {
+//             Path(v)
+//         }
+//     }
 
-    pub fn view(&self) -> &PathView {
-        &self.0
-    }
+//     pub fn view(&self) -> &PathView {
+//         &self.0
+//     }
 
-    pub fn endpoints(&self) -> Endpoints<Func> {
-        match self.view() {
-            PathView::Refl(f) => Endpoints(f.clone(), f.clone()),
-            PathView::Concat(p1, p2) => {
-                let Endpoints(p1_start, _) = p1.endpoints();
-                let Endpoints(_, p2_end) = p2.endpoints();
-                Endpoints(p1_start, p2_end)
-            }
-            PathView::Inverse(p) => {
-                let Endpoints(start, end) = p.endpoints();
-                Endpoints(end, start)
-            }
-            PathView::Rewrite(rw) => Endpoints(rw.clone().lhs(), rw.clone().rhs()),
-        }
-    }
-}
+//     pub fn endpoints(&self) -> Endpoints<Func> {
+//         match self.view() {
+//             PathView::Refl(f) => Endpoints(f.clone(), f.clone()),
+//             PathView::Concat(p1, p2) => {
+//                 let Endpoints(p1_start, _) = p1.endpoints();
+//                 let Endpoints(_, p2_end) = p2.endpoints();
+//                 Endpoints(p1_start, p2_end)
+//             }
+//             PathView::Inverse(p) => {
+//                 let Endpoints(start, end) = p.endpoints();
+//                 Endpoints(end, start)
+//             }
+//             PathView::Rewrite(rw) => Endpoints(rw.clone().lhs(), rw.clone().rhs()),
+//         }
+//     }
+// }
 use crate::rewrite::factory::Factory;
 
 // Returns a path starting with f and leading to a reduced form.
-pub fn reduce_fully(f: Func) -> Path {
+pub fn reduce_fully(f: Func) -> Rewrite {
+    println!("RED: {:?}", f);
     if let Some(rw) = factory::Reduce().for_lhs(f.clone()) {
         let rhs = rw.clone().rhs();
-        let rw_path = Path::validate(PathView::Rewrite(rw));
-        Path::validate(PathView::Concat(
-            Box::new(rw_path),
-            Box::new(reduce_fully(rhs)),
-        ))
+    println!("bar");
+        let reduced = reduce_fully(rhs);
+    println!("qux: {:?}", reduced);
+        Rewrite::validate(View::Concat(rw, reduced), f.tag().clone()).unwrap()
     } else {
-        Path::validate(PathView::Refl(f))
+    println!("baz");
+        Rewrite::validate(View::Refl(f.clone()), f.tag().clone()).unwrap()
     }
 }
