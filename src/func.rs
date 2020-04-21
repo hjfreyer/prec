@@ -123,7 +123,7 @@ impl Func {
     // Helper constructors.
     pub fn int(value: u32) -> Func {
         let mut res = Func::z();
-        for ii in 0..value {
+        for _ in 0..value {
             res = Func::apply(Func::s(), &[res]).unwrap();
         }
         res
@@ -215,17 +215,7 @@ impl Func {
         }
     }
 
-    pub fn unwrap_singleton(&self) -> Func {
-        if let View::Stack(car, cdr) = self.view() {
-            if let View::Empty(_) = cdr.view() {
-                return car.unwrap_singleton();
-            }
-        }
-
-        self.clone()
-    }
-
-    pub fn as_const(&self) -> Option<(Func, u32)> {
+    fn as_const(&self) -> Option<(Func, u32)> {
         if let View::Comp(f, g) = self.view() {
             if let &View::Empty(arity) = g.view() {
                 return Some((f.clone(), arity));
@@ -234,7 +224,7 @@ impl Func {
         None
     }
 
-    pub fn as_int(&self) -> Option<(u32, Option<u32>)> {
+    fn as_int(&self) -> Option<(u32, Option<u32>)> {
         if let Some((f, arity)) = self.as_const() {
             return f.as_int().map(|(value, _)| (value, Some(arity)));
         }
@@ -249,28 +239,7 @@ impl Func {
         None
     }
 
-    pub fn as_application(&self) -> Option<(Vec<Func>, Vec<Func>)> {
-        fn stack_to_backwards_vec(func: &Func) -> Vec<Func> {
-            match func.view() {
-                View::Empty(_) => vec![],
-                View::Stack(car, cdr) => {
-                    let mut cdr_vec = stack_to_backwards_vec(&*cdr);
-                    cdr_vec.push(car.clone());
-                    cdr_vec
-                }
-                _ => vec![func.clone()],
-            }
-        }
-
-        if let View::Comp(f, g) = self.view() {
-            return Some((
-                stack_to_backwards_vec(f).into_iter().rev().collect(),
-                stack_to_backwards_vec(g).into_iter().rev().collect(),
-            ));
-        }
-        None
-    }
-    pub fn as_application2(&self) -> Option<(StackHelper, StackHelper)> {
+    fn as_application(&self) -> Option<(StackHelper, StackHelper)> {
         fn stack_to_backwards_vec(func: &Func) -> StackHelper {
             match func.view() {
                 View::Empty(arity) => StackHelper {
@@ -347,13 +316,6 @@ impl fmt::Debug for Func {
                     Tag::None => (),
                     Tag::Alias(name) => return fmt.write_str(name),
                 }
-                //                let func = func.unwrap_singleton();
-
-                // if let Some((f, arity)) = func.as_const() {
-                //     fmt.write_fmt(format_args!("(const {} ", arity))?;
-                //     write(&f, fmt)?;
-                //     return fmt.write_str(")");
-                // }
 
                 if let Some((i, arity)) = func.as_int() {
                     if let Some(arity) = arity {
@@ -362,7 +324,7 @@ impl fmt::Debug for Func {
                         return fmt.write_fmt(format_args!("(int {})", i));
                     }
                 }
-                if let Some((fs, gs)) = func.as_application2() {
+                if let Some((fs, gs)) = func.as_application() {
                     // Special case for normal function application.
                     if fs.args.len() == 1 && 0 < gs.args.len() {
                         fmt.write_str("(")?;
@@ -393,68 +355,10 @@ impl fmt::Debug for Func {
                     }
 
                     fmt.write_str("(")?;
-                    write_stack(&fs, fmt);
+                    write_stack(&fs, fmt)?;
                     fmt.write_str(" * ")?;
-                    write_stack(&gs, fmt);
+                    write_stack(&gs, fmt)?;
                     return fmt.write_str(")");
-
-                    // match (f_iter.next(), f_iter.peek(), g_iter.next()) {
-                    //     (Some(f_init), None, Some(g_init)) => {
-
-                    //     }
-                    //     (o_f_init, _, o_g_init) => {
-
-                    //     }
-
-                    //     (None, None, None) => {
-                    //         fmt.write_fmt(format_args!("(!{} * !{})", fs.arity_in, gs.arity_in))?
-                    //     }
-                    //     (None, None, Some(g_init)) => {
-                    //         fmt.write_fmt(format_args!("(!{} * ", fs.arity_in))?;
-                    //         write(&g_init, fmt)?;
-                    //         for g in g_iter {
-                    //             fmt.write_str(" ")?;
-                    //             write(&g, fmt)?;
-                    //         }
-                    //         fmt.write_str(")")?;
-                    //     }
-
-                    //     (Some(f_init), None, None) => {
-                    //         fmt.write_str("(")?;
-                    //         write(&f_init, fmt)?;
-                    //         fmt.write_fmt(format_args!(" * !{})", gs.arity_in))?
-                    //     }
-                    //     (Some(f_init), Some(_), None) => {
-                    //         fmt.write_str("(<")?;
-                    //         write(&f_init, fmt)?;
-                    //         for f in f_iter {
-                    //             fmt.write_str("; ")?;
-                    //             write(&f_init, fmt)?;
-                    //         }
-                    //         fmt.write_fmt(format_args!("> * !{})", gs.arity_in))?
-                    //     }
-                    //     (Some(f_init), Some(_), Some(g_init)) => {
-                    //         fmt.write_str("(<")?;
-                    //         write(&f_init, fmt)?;
-                    //         for f in f_iter {
-                    //             fmt.write_str("; ")?;
-                    //             write(&f, fmt)?;
-                    //         }
-                    //         fmt.write_str("> * ")?;
-                    //         if let Some(_) = g_iter.peek() {
-                    //             fmt.write_str("<")?;
-                    //             write(&g_init, fmt)?;
-                    //             for g in g_iter {
-                    //                 fmt.write_str("; ")?;
-                    //                 write(&g, fmt)?;
-                    //             }
-                    //             fmt.write_str(">")?;
-                    //         } else {
-                    //             write(&g_init, fmt)?;
-                    //         }
-                    //         fmt.write_str(")")?;
-                    //     }
-                    // }
                 }
             }
 

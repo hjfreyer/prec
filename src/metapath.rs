@@ -6,22 +6,13 @@ use crate::rewrite;
 use func::{Func, View as FView};
 use rewrite::{Rewrite, View as RView};
 
-pub enum View {
-    RecZ(Endpoints<Func>, Func),
-    RecS(Func, Endpoints<Func>),
-}
-
-pub enum ApplicationError {
-    TypeMismatch(Endpoints<Func>, Path),
-}
-
 pub trait Metapath {
     fn endpoints(&self) -> Endpoints<Endpoints<Func>>;
     fn unchecked_apply(&self, start: &Path) -> Path;
 }
 
 pub trait Matcher {
-    type MP : Metapath;
+    type MP: Metapath;
 
     fn match_start(&self, start: &Endpoints<Func>) -> Option<Self::MP> {
         unimplemented!()
@@ -99,10 +90,7 @@ pub struct SimplifyMatcher();
 
 impl Matcher for SimplifyMatcher {
     type MP = Extend;
-    fn match_end(
-        &self,
-        Endpoints(end_start, end_end): &Endpoints<Func>,
-    ) -> Option<Self::MP> {
+    fn match_end(&self, Endpoints(end_start, end_end): &Endpoints<Func>) -> Option<Self::MP> {
         let start_reducer = path::reduce_fully(end_start);
         let end_reducer = path::reduce_fully(end_end);
 
@@ -113,22 +101,31 @@ impl Matcher for SimplifyMatcher {
     }
 }
 
-
 pub struct Induction(pub Func, pub Func);
 
 impl Metapath for Induction {
     fn endpoints(&self) -> Endpoints<Endpoints<Func>> {
         let Self(f, s_case) = self;
-        
+
         let func::Arity(_, f_arity) = f.arity();
         let start_start = Func::comp(f.clone(), Func::s_eye(f_arity)).unwrap();
-        let start_end =
-            Func::comp(s_case.clone(), Func::stack(f.clone(), Func::eye(f_arity)).unwrap()).unwrap();
+        let start_end = Func::comp(
+            s_case.clone(),
+            Func::stack(f.clone(), Func::eye(f_arity)).unwrap(),
+        )
+        .unwrap();
 
         let end_start = f.clone();
-        let end_end = Func::rec(Func::comp(f.clone(), Func::z_eye(f_arity)).unwrap(), s_case.clone()).unwrap();
+        let end_end = Func::rec(
+            Func::comp(f.clone(), Func::z_eye(f_arity)).unwrap(),
+            s_case.clone(),
+        )
+        .unwrap();
 
-        Endpoints(Endpoints(start_start, start_end), Endpoints(end_start, end_end))
+        Endpoints(
+            Endpoints(start_start, start_end),
+            Endpoints(end_start, end_end),
+        )
     }
 
     fn unchecked_apply(&self, start: &Path) -> Path {
@@ -136,138 +133,72 @@ impl Metapath for Induction {
     }
 }
 
-
 pub struct RecZ(pub Func, pub Func, pub Func);
 
 impl Metapath for RecZ {
     fn endpoints(&self) -> Endpoints<Endpoints<Func>> {
         let Self(z_start, z_end, s_case) = self;
-        Endpoints(Endpoints(z_start.clone(), z_end.clone()),
-            Endpoints(Func::rec(z_start.clone(), s_case.clone()).unwrap(), Func::rec(z_end.clone(), s_case.clone()).unwrap()))
+        Endpoints(
+            Endpoints(z_start.clone(), z_end.clone()),
+            Endpoints(
+                Func::rec(z_start.clone(), s_case.clone()).unwrap(),
+                Func::rec(z_end.clone(), s_case.clone()).unwrap(),
+            ),
+        )
     }
 
     fn unchecked_apply(&self, start: &Path) -> Path {
-                unimplemented!()
+        unimplemented!()
     }
 }
-
 
 pub struct RecZMatcher();
 
 impl Matcher for RecZMatcher {
     type MP = RecZ;
-    fn match_end(
-        &self,
-        Endpoints(end_start, end_end): &Endpoints<Func>,
-    ) -> Option<Self::MP> {
-        if let (FView::Rec(start_z, start_s), FView::Rec(end_z, end_s)) = (end_start.view(), end_end.view()) {
+    fn match_end(&self, Endpoints(end_start, end_end): &Endpoints<Func>) -> Option<Self::MP> {
+        if let (FView::Rec(start_z, start_s), FView::Rec(end_z, end_s)) =
+            (end_start.view(), end_end.view())
+        {
             if start_s.syntax_eq(end_s) {
-            return    Some(RecZ(start_z.clone(), end_z.clone(), start_s.clone()))
+                return Some(RecZ(start_z.clone(), end_z.clone(), start_s.clone()));
             }
         }
         None
     }
 }
-
 
 pub struct RecS(pub Func, pub Func, pub Func);
 
 impl Metapath for RecS {
     fn endpoints(&self) -> Endpoints<Endpoints<Func>> {
         let Self(z_case, s_start, s_end) = self;
-        Endpoints(Endpoints(s_start.clone(), s_end.clone()),
-            Endpoints(Func::rec(z_case.clone(), s_start.clone()).unwrap(), Func::rec(z_case.clone(), s_end.clone()).unwrap()))
+        Endpoints(
+            Endpoints(s_start.clone(), s_end.clone()),
+            Endpoints(
+                Func::rec(z_case.clone(), s_start.clone()).unwrap(),
+                Func::rec(z_case.clone(), s_end.clone()).unwrap(),
+            ),
+        )
     }
 
     fn unchecked_apply(&self, start: &Path) -> Path {
-                unimplemented!()
+        unimplemented!()
     }
 }
-
 
 pub struct RecSMatcher();
 
 impl Matcher for RecSMatcher {
     type MP = RecS;
-    fn match_end(
-        &self,
-        Endpoints(end_start, end_end): &Endpoints<Func>,
-    ) -> Option<Self::MP> {
-        if let (FView::Rec(start_z, start_s), FView::Rec(end_z, end_s)) = (end_start.view(), end_end.view()) {
+    fn match_end(&self, Endpoints(end_start, end_end): &Endpoints<Func>) -> Option<Self::MP> {
+        if let (FView::Rec(start_z, start_s), FView::Rec(end_z, end_s)) =
+            (end_start.view(), end_end.view())
+        {
             if start_z.syntax_eq(end_z) {
-               return Some(RecS(start_z.clone(), start_s.clone(), end_s.clone()))
+                return Some(RecS(start_z.clone(), start_s.clone(), end_s.clone()));
             }
         }
         None
     }
 }
-
-// pub struct InductionMatcher();
-
-// impl Matcher for InductionMatcher {
-//     fn match_end(&self, Endpoints(start, end): &Endpoints<Func>) -> Option<Self::MP> {
-//         Some(Box::new(Reverse(Endpoints(end.clone(), start.clone()))))
-//     }
-// }
-
-// #[derive(Clone, Debug)]
-// pub struct ExtendEnd(Endpoints<Func>);
-
-// impl Metapath for ExtendEnd {
-//     fn endpoints(&self) -> Endpoints<Endpoints<Func>> {
-//         let Self(Endpoints(start, end)) = self.clone();
-//         Endpoints(Endpoints(start.clone(), end.clone()), Endpoints(end, start))
-//     }
-
-//     fn apply(self, start: &Path) -> Result<Path, ApplicationError> {
-//         let Self(ep) = self;
-//         if !ep.syntax_eq(&start.endpoints()) {
-//             return Err(ApplicationError::TypeMismatch(ep, start.clone()));
-//         }
-
-//         Ok(Path::validate(PView::Reverse(start.clone())).unwrap())
-//     }
-
-//     fn match_end(Endpoints(start, end): &Endpoints<Func>) -> Option<Self> {
-//         Some(Self(Endpoints(end.clone(), start.clone())))
-//     }
-// }
-
-// #[derive(Clone, Debug)]
-// pub struct RecZ(Endpoints<Func>, Func);
-
-// impl Metapath for RecZ {
-//     fn endpoints(&self) -> Endpoints<Endpoints<Func>> {
-//         let RecZ(Endpoints(z_start, z_end), s_case) = self;
-//         Endpoints(
-//             Endpoints(z_start.clone(), z_end.clone()),
-//             Endpoints(
-//                 Func::rec(z_start.clone(), s_case.clone()).unwrap(),
-//                 Func::rec(z_end.clone(), s_case.clone()).unwrap(),
-//             ),
-//         )
-//     }
-
-//     fn apply(self, start: &Path) -> Result<Path, ApplicationError> {
-//         let RecZ(z_ep, s_case) = self;
-//         if !z_ep.syntax_eq(&start.endpoints()) {
-//             return Err(ApplicationError::TypeMismatch(z_ep, start.clone()));
-//         }
-
-//         Ok(Path::validate(PView::RecZ(start.clone(), s_case)).unwrap())
-//     }
-
-//     fn match_end(Endpoints(start, end): &Endpoints<Func>) -> Option<Self> {
-//         if let FView::Rec(s_z_case, s_s_case) = start.view() {
-//             if let FView::Rec(e_z_case, e_s_case) = end.view() {
-//                 if s_s_case.syntax_eq(e_s_case) {
-//                     return Some(Self(
-//                         Endpoints(s_z_case.clone(), e_z_case.clone()),
-//                         s_s_case.clone(),
-//                     ));
-//                 }
-//             }
-//         }
-//         None
-//     }
-// }

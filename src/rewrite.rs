@@ -111,24 +111,28 @@ impl Rewrite {
                 )?),
                 Side::Right => Ok(Func::comp(z_case, other_args)?),
             },
-            View::RecElimS(z_case, s_case, rec_tag, s_args_car, s_args_cdr, other_args) => match side {
-                Side::Left => Ok(Func::comp(
-                    Func::rec(z_case, s_case)?.set_tag(rec_tag.clone()),
-                    Func::stack(
-                        Func::comp(Func::s(), Func::stack(s_args_car, s_args_cdr)?)?,
-                        other_args,
-                    )?,
-                )?),
-                Side::Right => {
-                    let decremented_args = Func::stack(s_args_car, other_args)?;
-                    let rec_call =
-                        Func::comp(Func::rec(z_case, s_case.clone())?.set_tag(rec_tag.clone()), decremented_args.clone())?;
-                    Ok(Func::comp(
-                        s_case,
-                        Func::stack(rec_call, decremented_args)?,
-                    )?)
+            View::RecElimS(z_case, s_case, rec_tag, s_args_car, s_args_cdr, other_args) => {
+                match side {
+                    Side::Left => Ok(Func::comp(
+                        Func::rec(z_case, s_case)?.set_tag(rec_tag.clone()),
+                        Func::stack(
+                            Func::comp(Func::s(), Func::stack(s_args_car, s_args_cdr)?)?,
+                            other_args,
+                        )?,
+                    )?),
+                    Side::Right => {
+                        let decremented_args = Func::stack(s_args_car, other_args)?;
+                        let rec_call = Func::comp(
+                            Func::rec(z_case, s_case.clone())?.set_tag(rec_tag.clone()),
+                            decremented_args.clone(),
+                        )?;
+                        Ok(Func::comp(
+                            s_case,
+                            Func::stack(rec_call, decremented_args)?,
+                        )?)
+                    }
                 }
-            },
+            }
         }
     }
 
@@ -294,47 +298,3 @@ impl Rule {
         }
     }
 }
-
-//     pub struct RecElimS();
-// -    impl Factory for RecElimS {
-// -        fn for_lhs(&self, func: Func) -> Option<Rewrite> {
-// -            let tag = func.tag().clone();
-// -            if let FView::Comp(f, g) = func.into_view() {
-// -                if let (FView::Rec(z_case, s_case), FView::Stack(car, other_args)) =
-// -                    (f.view(), g.view())
-// -                {
-// -                    match car.view() {
-// -                        FView::S => {
-// -                            let s_eta_abstract = Rewrite::validate(
-// -                                View::EtaAbstractionRight(Func::s()),
-// -                                func::Tag::None,
-// -                            )
-// -                            .unwrap();
-// -                            let inside_stack = Rewrite::validate(
-// -                                View::StackCar(s_eta_abstract, other_args.clone()),
-// -                                func::Tag::None,
-// -                            )
-// -                            .unwrap();
-// -                            Some(Rewrite::validate(View::CompRight(f, inside_stack), tag).unwrap())
-// -                        } FView::Comp(f, s_args) => {
-// -                            if let (FView::S, FView::Stack(s_args_car, s_args_cdr)) =
-// -                                (f.view(), s_args.view())
-// -                            {
-// -                                Some(
-// -                                    Rewrite::validate(
-// -                                        View::RecElimS(
-// -                                            z_case.clone(),
-// -                                            s_case.clone(),
-// -                                            s_args_car.clone(),
-// -                                            s_args_cdr.clone(),
-// -                                            other_args.clone(),
-// -                                        ),
-// -                                        tag,
-// -                                    )
-// -                                    .unwrap(),
-// -                                )
-// -                            } else {
-// -                                None
-// -                            }
-// -                        }
-// -                        _ => None,
