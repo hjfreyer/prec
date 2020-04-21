@@ -186,6 +186,33 @@ impl MetaMultipathMatcher for CutMatcher {
     }
 }
 
+pub struct Concat<MMP1:MetaMultipath, MMP2:MetaMultipath>(pub MMP1, pub MMP2);
+
+impl <MMP1:MetaMultipath, MMP2:MetaMultipath> MetaMultipath for Concat<MMP1, MMP2> {
+    fn endpoints(&self) -> Endpoints<ContextSpec> {
+        let Self(p1, p2) = self;
+        Endpoints(p1.endpoints().start().clone(), p2.endpoints().end().clone())
+    }
+
+    fn unchecked_apply(&self, start: &Context) -> Context {
+        unimplemented!()
+    }
+}
+pub struct ConcatMatcher<MMPM1:MetaMultipathMatcher, MMPM2:MetaMultipathMatcher>(pub MMPM1, pub MMPM2);
+
+impl <MMPM1:MetaMultipathMatcher, MMPM2:MetaMultipathMatcher> MetaMultipathMatcher for ConcatMatcher<MMPM1, MMPM2> {
+    fn match_end(&self, end: &ContextSpec) -> Option<Box<dyn MetaMultipath>> {
+        let ConcatMatcher(m1, m2) = self;
+        if let Some(p2) = m2.match_end(end) {
+            let mid = p2.endpoints().start();
+            if let Some(p1) = m1.match_end(mid) {
+return                Some(Box::new(Concat(p1, p2)))
+            }
+        }
+        None
+    }
+}
+
 pub struct Lift(Box<dyn Metapath>, ContextSpec);
 
 impl MetaMultipath for Lift {
@@ -210,6 +237,37 @@ impl MetaMultipathMatcher for LiftMatcher {
             if let Some(m) = lift_matcher.match_end(ep) {
                 return Some(Box::new(Lift(m, (**cdr).clone())));
             }
+        }
+        None
+    }
+}
+
+pub struct Lift2(Endpoints<Func>, Box<dyn Metapath>, ContextSpec);
+
+impl MetaMultipath for Lift2 {
+    fn endpoints(&self) -> Endpoints<ContextSpec> {
+        let Self(head, mp, ctx) = self;
+        let Endpoints(start, end) = mp.endpoints();
+        Endpoints(
+            ContextSpec::cons(head.clone(), ContextSpec::cons(start, ctx.clone())),
+            ContextSpec::cons(head.clone(), ContextSpec::cons(end, ctx.clone())),
+        )
+    }
+    fn unchecked_apply(&self, start: &Context) -> Context {
+        unimplemented!()
+    }
+}
+pub struct Lift2Matcher(pub Box<dyn MetapathMatcher>);
+
+impl MetaMultipathMatcher for Lift2Matcher {
+    fn match_end(&self, end: &ContextSpec) -> Option<Box<dyn MetaMultipath>> {
+        let Self(lift_matcher) = self;
+        if let ContextSpec::Cons(head, cdr) = end {
+            if let ContextSpec::Cons(ep, cdr) = &**cdr {
+            if let Some(m) = lift_matcher.match_end(ep) {
+                return Some(Box::new(Lift2(head.clone(), m, (**cdr).clone())));
+            }
+        }
         }
         None
     }
@@ -244,6 +302,22 @@ return            Some(Box::new(Induction(metapath::Induction(f.clone(), s_case.
 }
 
 
+pub struct RecSplitMatcher();
+
+impl MetaMultipathMatcher for RecSplitMatcher {
+    fn match_end(&self, end: &ContextSpec) -> Option<Box<dyn MetaMultipath>> {
+        if let ContextSpec::Cons(Endpoints(start_rec, end_rec), cdr) = end {
+            if let (FView::Rec(start_z, start_s), FView::Rec(end_z, end_s)) = (start_rec.view(), end_rec.view()) {
+                let midpoint = Func::rec(end_z.clone(), start_s.clone()).unwrap();
+                // Building up from the two cases:
+                let z_mmp = Lift
+return            Some(Box::new(Induction(metapath::Induction(f.clone(), s_case.clone()), target.clone(), (**cdr).clone())))
+
+            }
+        }
+        None
+    }
+}
 pub fn forward_chain<M: MetaMultipathMatcher>(
     matcher: &M,
     ctx: &ContextSpec,

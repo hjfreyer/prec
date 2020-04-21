@@ -127,9 +127,26 @@ impl Metapath for Induction {
     }
 
     fn unchecked_apply(&self, start: &Path) -> Path {
-        Path::validate(PView::Reverse(start.clone())).unwrap()
+        unimplemented!()
     }
 }
+
+
+pub struct RecZ(pub Endpoints<Func>, pub Func);
+
+impl Metapath for RecZ {
+    fn endpoints(&self) -> Endpoints<Endpoints<Func>> {
+        let Self(z_rw @ Endpoints(z_start, z_end), s_case) = self;
+        Endpoints(z_rw.clone(),
+            Endpoints(Func::rec(z_start.clone(), s_case.clone()).unwrap(), Func::rec(z_end.clone(), s_case.clone()).unwrap()))
+    }
+
+    fn unchecked_apply(&self, start: &Path) -> Path {
+                unimplemented!()
+    }
+}
+
+
 
 // pub struct InductionMatcher();
 
