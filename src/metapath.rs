@@ -1,7 +1,7 @@
 use crate::base::{Endpoints, SyntaxEq};
 use crate::func;
 use crate::path;
-use crate::path::{Path, View as PView};
+use crate::path::{Path, PathFinder, View as PView};
 use crate::rewrite;
 use func::{Func, View as FView};
 use rewrite::{Rewrite, View as RView};
@@ -71,35 +71,45 @@ impl Metapath for Extend {
     }
 }
 
-pub struct ExtendMatcher(Path, Path);
+pub struct ExtendMatcher<PrefixFinder: PathFinder, SuffixFinder: PathFinder>(
+    PrefixFinder,
+    SuffixFinder,
+);
 
-impl Matcher for ExtendMatcher {
+impl<PrefixFinder: PathFinder, SuffixFinder: PathFinder> Matcher
+    for ExtendMatcher<PrefixFinder, SuffixFinder>
+{
     type MP = Extend;
     fn match_end(&self, end_path: &Endpoints<Func>) -> Option<Self::MP> {
-        let Self(prefix, suffix) = self;
-        if prefix.endpoints().start().syntax_eq(end_path.start())
-            && end_path.end().syntax_eq(&suffix.endpoints().end())
-        {
-            return Some(Extend(prefix.clone(), suffix.clone()));
-        }
-        None
+        let Self(prefix_finder, suffix_finder) = self;
+        let prefix = prefix_finder.match_start(end_path.start())?;
+        let suffix = prefix_finder.match_start(end_path.end())?;
+
+        return Some(Extend(
+            prefix,
+            Path::validate(PView::Reverse(suffix)).unwrap(),
+        ));
     }
 }
 
-pub struct SimplifyMatcher();
-
-impl Matcher for SimplifyMatcher {
-    type MP = Extend;
-    fn match_end(&self, Endpoints(end_start, end_end): &Endpoints<Func>) -> Option<Self::MP> {
-        let start_reducer = path::reduce_fully(end_start);
-        let end_reducer = path::reduce_fully(end_end);
-
-        Some(Extend(
-            start_reducer,
-            Path::validate(PView::Reverse(end_reducer)).unwrap(),
-        ))
-    }
+pub fn SimplifyMatcher() -> ExtendMatcher<path::Reducer, path::Reducer> {
+    ExtendMatcher(path::Reducer(), path::Reducer())
 }
+
+// pub struct SimplifyMatcher();
+
+// impl Matcher for SimplifyMatcher {
+//     type MP = Extend;
+//     fn match_end(&self, Endpoints(end_start, end_end): &Endpoints<Func>) -> Option<Self::MP> {
+//         let start_reducer = path::reduce_fully(end_start);
+//         let end_reducer = path::reduce_fully(end_end);
+
+//         Some(Extend(
+//             start_reducer,
+//             Path::validate(PView::Reverse(end_reducer)).unwrap(),
+//         ))
+//     }
+// }
 
 pub struct Induction(pub Func, pub Func);
 
@@ -202,3 +212,5 @@ impl Matcher for RecSMatcher {
         None
     }
 }
+
+

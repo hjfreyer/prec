@@ -298,3 +298,45 @@ impl Rule {
         }
     }
 }
+
+pub trait EndMatcher {
+    fn match_end(&self, func: &Func) -> Option<Rewrite>;
+}
+
+pub fn comp_factor_empty(factored: &Func) -> impl EndMatcher {
+    struct Impl(Func);
+
+    impl EndMatcher for Impl {
+        fn match_end(&self, func: &Func) -> Option<Rewrite> {
+            let Self(factored) = self;
+            let (f, g) = factored.decompose()?;
+            println!("{:?}", factored);
+            None
+        }
+    }
+
+    Impl(factored.clone())
+}
+
+pub fn comp_factor_stack() -> impl EndMatcher {
+    struct Impl();
+
+    impl EndMatcher for Impl {
+        fn match_end(&self, func: &Func) -> Option<Rewrite> {
+            let (car, cdr) = func.unstack()?;
+            let (car_f, car_g) = car.decompose()?;
+            let (cdr_f, cdr_g) = cdr.decompose()?;
+
+            if car_g.syntax_eq(&cdr_g) {
+                Some(Rewrite::new(View::CompDistributeStack(car_f, cdr_f, car_g), func::Tag::None))
+            } else {
+                None
+            }
+        }
+    }
+
+    Impl()
+}
+
+// CompDistributeEmpty,
+//    CompDistributeStack

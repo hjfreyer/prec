@@ -1,5 +1,6 @@
 use crate::base::{Endpoints, SyntaxEq};
 use crate::func;
+use crate::pattern;
 use crate::rewrite;
 use crate::rewrite::Rewrite;
 use func::View as FView;
@@ -90,6 +91,39 @@ impl Path {
         }
     }
 }
+
+pub trait PathFinder {
+    fn match_start(&self, func: &Func) -> Option<Path>;
+}
+
+pub struct Reducer();
+
+impl PathFinder for Reducer {
+    fn match_start(&self, func: &Func) -> Option<Path> {
+        Some(reduce_fully(func))
+    }
+}
+
+
+// fn factor() -> impl PathFinder {
+//     struct Impl();
+
+// impl PathFinder for Impl {
+//     fn match_start(&self, func: &Func) -> Option<Path> {
+//         rewrite::comp_factor_stack()(func)
+//         let Self(factored) = self;
+//         let proposal = Path::validate(View::Reverse(Rewrite::validate(RView::CompDistributeEmpty(factored)).unwrap())).unwrap();
+//         if proposal.endpoints().start().syntax_eq(func) {
+//             Some(proposal)
+//         } else {
+//             None
+//         }
+//     }
+// }
+// Impl()
+// }
+
+
 
 pub fn reduce_once(func: &Func) -> Option<Path> {
     macro_rules !try_rules {

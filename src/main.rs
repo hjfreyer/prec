@@ -3,6 +3,7 @@ mod func;
 mod base;
 mod metapath;
 mod path;
+mod pattern;
 mod rewrite;
 mod tactics;
 use crate::base::{Endpoints, SyntaxEq};
@@ -52,32 +53,45 @@ fn main() {
 
     // Proof that ed = 1
 
-    let mut g = tactics::ContextSpec::cons(
-        Endpoints(func![(is_even double)], func![(const 1 (int 1))]),
-        tactics::ContextSpec::Empty,
-    );
-    println!("{:?}", g);
-
-    g = advance(g, &tactics::InductionMatcher(func![((not not) (proj 0 2))]));
-    g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
-    g = advance(g, &tactics::PushReflMatcher());
-    g = advance(g, &tactics::LiftMatcher(metapath::ReverseMatcher()));
-    g = advance(g, &tactics::InductionMatcher(func![((not not) (proj 0 2))]));
-    g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
-    g = advance(g, &tactics::PushReflMatcher());
-    g = advance(g, &tactics::RecSplitMatcher());
-    g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
-    g = advance(g, &tactics::PushReflMatcher());
-    g = advance(g, &tactics::PushReflMatcher());
-
     // let mut g = tactics::ContextSpec::cons(
-    //     Endpoints(func![(half double)], func![(proj 0 1)]),
+    //     Endpoints(func![(is_even double)], func![(const 1 (int 1))]),
     //     tactics::ContextSpec::Empty,
     // );
     // println!("{:?}", g);
 
-    // g = advance(g, &tactics::InductionMatcher(func![(S (proj 0 2))]));
+    // g = advance(g, &tactics::InductionMatcher(func![((not not) (proj 0 2))]));
     // g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+    // g = advance(g, &tactics::PushReflMatcher());
+    // g = advance(g, &tactics::LiftMatcher(metapath::ReverseMatcher()));
+    // g = advance(g, &tactics::InductionMatcher(func![((not not) (proj 0 2))]));
+    // g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+    // g = advance(g, &tactics::PushReflMatcher());
+    // g = advance(g, &tactics::RecSplitMatcher());
+    // g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+    // g = advance(g, &tactics::PushReflMatcher());
+    //    g = advance(g, &tactics::PushReflMatcher());
+
+
+    // Proof that (half double) = id
+    //
+    let mut g = tactics::ContextSpec::cons(
+        Endpoints(func![(half double)], func![(proj 0 1)]),
+        tactics::ContextSpec::Empty,
+    );
+    println!("{:?}", g);
+
+    g = advance(g, &tactics::InductionMatcher(func![(S (proj 0 2))]));
+    g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+
+    let factored = func![
+        ((maybe_increment 
+            (not (proj 0 2)) 
+            (maybe_increment (proj 0 2) (proj 1 2))
+        ) (not (is_even double)) (half double)) ];
+    g = advance(g, &tactics::CutMatcher(factored));
+    g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+    g = advance(g, &tactics::PushReflMatcher());
+
 
     // g = advance(g, &tactics::InductionMatcher(func![(proj 0 2)]));
     // g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
