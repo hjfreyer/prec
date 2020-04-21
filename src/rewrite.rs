@@ -27,7 +27,7 @@ pub enum View {
 
     // Recursion.
     RecElimZ(Func, Func, Func, Func),
-    RecElimS(Func, Func, Func, Func, Func),
+    RecElimS(Func, Func, func::Tag, Func, Func, Func),
 }
 
 enum Side {
@@ -111,9 +111,9 @@ impl Rewrite {
                 )?),
                 Side::Right => Ok(Func::comp(z_case, other_args)?),
             },
-            View::RecElimS(z_case, s_case, s_args_car, s_args_cdr, other_args) => match side {
+            View::RecElimS(z_case, s_case, rec_tag, s_args_car, s_args_cdr, other_args) => match side {
                 Side::Left => Ok(Func::comp(
-                    Func::rec(z_case, s_case)?,
+                    Func::rec(z_case, s_case)?.set_tag(rec_tag.clone()),
                     Func::stack(
                         Func::comp(Func::s(), Func::stack(s_args_car, s_args_cdr)?)?,
                         other_args,
@@ -122,7 +122,7 @@ impl Rewrite {
                 Side::Right => {
                     let decremented_args = Func::stack(s_args_car, other_args)?;
                     let rec_call =
-                        Func::comp(Func::rec(z_case, s_case.clone())?, decremented_args.clone())?;
+                        Func::comp(Func::rec(z_case, s_case.clone())?.set_tag(rec_tag.clone()), decremented_args.clone())?;
                     Ok(Func::comp(
                         s_case,
                         Func::stack(rec_call, decremented_args)?,
@@ -269,6 +269,7 @@ impl Rule {
             }
             Rule::RecElimS => {
                 if let FView::Comp(f, g) = func.into_view() {
+                    let f_tag = f.tag().clone();
                     if let (FView::Rec(z_case, s_case), FView::Stack(car, other_args)) =
                         (f.view(), g.view())
                     {
@@ -279,6 +280,7 @@ impl Rule {
                                 return Some(View::RecElimS(
                                     z_case.clone(),
                                     s_case.clone(),
+                                    f_tag,
                                     s_args_car.clone(),
                                     s_args_cdr.clone(),
                                     other_args.clone(),

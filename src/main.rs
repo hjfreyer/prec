@@ -1688,6 +1688,12 @@ use tactics::{MetaMultipath, MetaMultipathMatcher};
 //     // }
 // }
 
+fn advance<M : tactics::MetaMultipathMatcher>(g : tactics::ContextSpec, m : &M) -> tactics::ContextSpec {
+    let g  = m.match_end(&g).unwrap().endpoints().start().clone();
+    println!("{:?}", g);
+    g
+}
+
 fn main() {
     func_let![
         let _a = ((proj 2 3) (int 0) (int 1) (int 2));
@@ -1705,58 +1711,101 @@ fn main() {
 
         let is_even = (rec (int 1) (not (proj 0 2)));
         let double = (rec (int 0) (S (S (proj 0 2))));
+
+        let maybe_increment = (rec (proj 0 1) (S (proj 2 3)));
+        let plus_mod2 = (maybe_increment (not (is_even (proj 0 2))) (proj 1 2));
+        let half = (rec (int 0) (plus_mod2 (proj 1 2) (proj 0 2)));
     ];
     //    println!("{:#?}", is_even);
 
     //    let g = goal::HorizontalPath::new(func![(is_even double)], func![(const 1 (int 1))]);
 
     //    let mut g = im::vector![Endpoints(_t4, func![(int 1)])];
-    let mut g = tactics::ContextSpec::cons(
-        Endpoints(func![(is_even double)], func![(const 1 (int 1))]),
-        tactics::ContextSpec::Empty,
-    );
 
-    let tax : Vec<Box<dyn tactics::MetaMultipathMatcher>>= vec![
-//        &tactics::PushReflMatcher(),
- //   Box::new(tactics::LiftMatcher(Box::new(metapath::SimplifyMatcher())))
-        // &tactics::Simplify(),
-        //       tactics::forward_chain::<tactics::PushRefl>,
-//        tactics::forward_chain::<tactics::Symm>,
-        Box::new(tactics::InductionMatcher(func![((not not) (proj 0 2))])),
- Box::new(tactics::LiftMatcher(Box::new(metapath::SimplifyMatcher()))),
- Box::new(tactics::PushReflMatcher()),
- Box::new(tactics::LiftMatcher(Box::new(metapath::ReverseMatcher()))),
-        Box::new(tactics::InductionMatcher(func![(proj 0 2)])),
- Box::new(tactics::LiftMatcher(Box::new(metapath::SimplifyMatcher()))),
- Box::new(tactics::PushReflMatcher()),
-//  Box::new(tactics::LiftMatcher(Box::new(metapath::SimplifyMatcher()))),
-// Box::new(tactics::PushReflMatcher()),
-        // Box::new(tactics::CutMatcher(func![(rec (int 1) ((not not) (proj 0 2)))])),
-        // Box::new(tactics::LiftMatcher(Box::new(metapath::SimplifyMatcher()))),
-        //       tactics::Tactic::Induction(func![((not not) (proj 0 2))]),
-        // tactics::Tactic::ReduceRight,
-        // tactics::Tactic::Symm,
-        // tactics::Tactic::ReduceRight,
-        // tactics::Tactic::Ident,
-        // tactics::Tactic::Symm,
-        // tactics::Tactic::ReduceRight,
-        // tactics::Tactic::Induction(func![(proj 0 2)]),
-        // tactics::Tactic::ReduceRight,
-        // tactics::Tactic::Symm,
-        // tactics::Tactic::ReduceRight,
-        // tactics::Tactic::Ident,
-        // tactics::Tactic::ReduceRight,
-        // tactics::ContextTransformFactoryFamily::PushRefl,
-    ];
+
+    // Proof that ed = 1
+
+    // let mut g = tactics::ContextSpec::cons(
+    //     Endpoints(func![(is_even double)], func![(const 1 (int 1))]),
+    //     tactics::ContextSpec::Empty,
+    // );    
+    // println!("{:?}", g);
+
+    // g = advance(g, &tactics::InductionMatcher(func![((not not) (proj 0 2))]));
+    // g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+    // g = advance(g, &tactics::PushReflMatcher());
+    // g = advance(g, &tactics::LiftMatcher(metapath::ReverseMatcher()));
+    // g = advance(g, &tactics::InductionMatcher(func![((not not) (proj 0 2))]));
+    // g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+    // g = advance(g, &tactics::PushReflMatcher());
+    // g = advance(g, &tactics::RecSplitMatcher());
+    // g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+    // g = advance(g, &tactics::PushReflMatcher());
+    // g = advance(g, &tactics::PushReflMatcher());
+    
+       let mut g = tactics::ContextSpec::cons(
+        Endpoints(func![(half double)], func![(proj 0 1)]),
+        tactics::ContextSpec::Empty,
+    );    
     println!("{:?}", g);
-    for t in tax.into_iter() {
-        g = t.match_end(&g).unwrap().endpoints().start().clone();
-        println!("{:?}", g);
-        // for op in t.for_goal(&g) {
-        //     g = op.reverse(g.clone()).unwrap();
-        //     println!("{:?}", tactics::ContextSpecWrapper(g.clone()));
-        // }
-    }
+
+    
+    g = advance(g, &tactics::InductionMatcher(func![(S (proj 0 2))]));
+    g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+
+
+
+    // g = advance(g, &tactics::InductionMatcher(func![(proj 0 2)]));
+    // g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+    // g = advance(g, &tactics::PushReflMatcher());
+    // g = advance(g, &tactics::LiftMatcher(metapath::ReverseMatcher()));
+    // g = advance(g, &tactics::InductionMatcher(func![(proj 0 2)]));
+    // g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+    // g = advance(g, &tactics::PushReflMatcher());
+
+
+
+//     let tax : Vec<Box<dyn tactics::MetaMultipathMatcher>>= vec![
+// //        &tactics::PushReflMatcher(),
+//  //   Box::new(tactics::LiftMatcher(Box::new(metapath::SimplifyMatcher())))
+//         // &tactics::Simplify(),
+//         //       tactics::forward_chain::<tactics::PushRefl>,
+// //        tactics::forward_chain::<tactics::Symm>,
+//         Box::new(tactics::InductionMatcher(func![((not not) (proj 0 2))])),
+//  Box::new(tactics::LiftMatcher(Box::new(metapath::SimplifyMatcher()))),
+//  Box::new(tactics::PushReflMatcher()),
+//  Box::new(tactics::LiftMatcher(Box::new(metapath::ReverseMatcher()))),
+//         Box::new(tactics::InductionMatcher(func![(proj 0 2)])),
+//  Box::new(tactics::LiftMatcher(Box::new(metapath::SimplifyMatcher()))),
+//  Box::new(tactics::PushReflMatcher()),
+// //  Box::new(tactics::LiftMatcher(Box::new(metapath::SimplifyMatcher()))),
+// // Box::new(tactics::PushReflMatcher()),
+//         // Box::new(tactics::CutMatcher(func![(rec (int 1) ((not not) (proj 0 2)))])),
+//         // Box::new(tactics::LiftMatcher(Box::new(metapath::SimplifyMatcher()))),
+//         //       tactics::Tactic::Induction(func![((not not) (proj 0 2))]),
+//         // tactics::Tactic::ReduceRight,
+//         // tactics::Tactic::Symm,
+//         // tactics::Tactic::ReduceRight,
+//         // tactics::Tactic::Ident,
+//         // tactics::Tactic::Symm,
+//         // tactics::Tactic::ReduceRight,
+//         // tactics::Tactic::Induction(func![(proj 0 2)]),
+//         // tactics::Tactic::ReduceRight,
+//         // tactics::Tactic::Symm,
+//         // tactics::Tactic::ReduceRight,
+//         // tactics::Tactic::Ident,
+//         // tactics::Tactic::ReduceRight,
+//         // tactics::ContextTransformFactoryFamily::PushRefl,
+//     ];
+//     println!("{:?}", g);
+//     for t in tax.into_iter() {
+//         g = t.match_end(&g).unwrap().endpoints().start().clone();
+//         println!("{:?}", g);
+//         // for op in t.for_goal(&g) {
+//         //     g = op.reverse(g.clone()).unwrap();
+//         //     println!("{:?}", tactics::ContextSpecWrapper(g.clone()));
+//         // }
+//     }
 
     // println!("got here");
     // println!("{:?}", g);
