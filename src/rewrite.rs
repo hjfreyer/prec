@@ -328,7 +328,10 @@ pub fn comp_factor_stack() -> impl EndMatcher {
             let (cdr_f, cdr_g) = cdr.decompose()?;
 
             if car_g.syntax_eq(&cdr_g) {
-                Some(Rewrite::new(View::CompDistributeStack(car_f, cdr_f, car_g), func::Tag::None))
+                Some(Rewrite::new(
+                    View::CompDistributeStack(car_f, cdr_f, car_g),
+                    func::Tag::None,
+                ))
             } else {
                 None
             }

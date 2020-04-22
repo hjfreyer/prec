@@ -71,7 +71,6 @@ fn main() {
     // g = advance(g, &tactics::PushReflMatcher());
     //    g = advance(g, &tactics::PushReflMatcher());
 
-
     // Proof that (half double) = id
     //
     let mut g = tactics::ContextSpec::cons(
@@ -82,17 +81,44 @@ fn main() {
 
     g = advance(g, &tactics::InductionMatcher(func![(S (proj 0 2))]));
     g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
-
-    let factored = func![
-        ((maybe_increment 
-            (not (proj 0 2)) 
-            (maybe_increment (proj 0 2) (proj 1 2))
-        ) (not (is_even double)) (half double)) ];
+    let factored = func![((maybe_increment
+        (not (proj 0 2))
+        (maybe_increment
+            (proj 0 2)
+            (proj 1 2))) (not (is_even (double (proj 0 1)))) (half double))
+    ];
     g = advance(g, &tactics::CutMatcher(factored));
     g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
     g = advance(g, &tactics::PushReflMatcher());
 
+    let maybe_increment_gone = func![
+        ((S (proj 1 2)) (not (is_even (double (proj 0 1)))) (half double))
+    ];
+    g = advance(g, &tactics::CutMatcher(maybe_increment_gone));
+    g = advance(g, &tactics::LiftMatcher(metapath::comp_left_match()));
+    g = advance(g, &tactics::InductionMatcher(func![(S (proj 2 3))]));
+    g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+    g = advance(g, &tactics::PushReflMatcher());
+    g = advance(g, &tactics::LiftMatcher(metapath::ReverseMatcher()));
+    g = advance(g, &tactics::InductionMatcher(func![(S (proj 2 3))]));
+    g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+    g = advance(g, &tactics::PushReflMatcher());
+    g = advance(g, &tactics::RecSplitMatcher());
+    g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+    g = advance(g, &tactics::PushReflMatcher());
+    g = advance(g, &tactics::PushReflMatcher());
+    g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+    g = advance(g, &tactics::PushReflMatcher());
+    g = advance(g, &tactics::LiftMatcher(metapath::ReverseMatcher()));
+    g = advance(g, &tactics::InductionMatcher(func![(S (proj 0 2))]));
+    g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+    g = advance(g, &tactics::PushReflMatcher());
 
+    g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+    g = advance(g, &tactics::RecSplitMatcher());
+    g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
+    g = advance(g, &tactics::PushReflMatcher());
+    g = advance(g, &tactics::PushReflMatcher());
     // g = advance(g, &tactics::InductionMatcher(func![(proj 0 2)]));
     // g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
     // g = advance(g, &tactics::PushReflMatcher());

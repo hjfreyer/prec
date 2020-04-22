@@ -213,4 +213,41 @@ impl Matcher for RecSMatcher {
     }
 }
 
+pub struct CompLeft(Func, Func, Func);
+impl Metapath for CompLeft {
+    fn endpoints(&self) -> Endpoints<Endpoints<Func>> {
+        let Self(f_start, f_end, g) = self;
+        Endpoints(
+            Endpoints(f_start.clone(), f_end.clone()),
+            Endpoints(
+                Func::comp(f_start.clone(), g.clone()).unwrap(),
+                Func::comp(f_end.clone(), g.clone()).unwrap(),
+            ),
+        )
+    }
 
+    fn unchecked_apply(&self, start: &Path) -> Path {
+        unimplemented!()
+    }
+}
+
+// fn refl() -> impl Matcher {
+
+// }
+
+pub fn comp_left_match() -> impl Matcher {
+    impl Matcher for () {
+        type MP = CompLeft;
+
+        fn match_end(&self, Endpoints(end_start, end_end): &Endpoints<Func>) -> Option<Self::MP> {
+            let (start_f, start_g) = end_start.decompose()?;
+            let (end_f, end_g) = end_end.decompose()?;
+
+            if start_g.syntax_eq(&end_g) {
+                Some(CompLeft(start_f.clone(), end_f.clone(), start_g.clone()))
+            } else {
+                None
+            }
+        }
+    }
+}

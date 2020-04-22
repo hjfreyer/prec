@@ -96,6 +96,14 @@ pub trait PathFinder {
     fn match_start(&self, func: &Func) -> Option<Path>;
 }
 
+pub fn refl() -> impl PathFinder {
+    impl PathFinder for () {
+        fn match_start(&self, func: &Func) -> Option<Path> {
+            Some(Path::validate(View::Refl(func.clone())).unwrap())
+        }
+    }
+}
+
 pub struct Reducer();
 
 impl PathFinder for Reducer {
@@ -103,7 +111,6 @@ impl PathFinder for Reducer {
         Some(reduce_fully(func))
     }
 }
-
 
 // fn factor() -> impl PathFinder {
 //     struct Impl();
@@ -122,8 +129,6 @@ impl PathFinder for Reducer {
 // }
 // Impl()
 // }
-
-
 
 pub fn reduce_once(func: &Func) -> Option<Path> {
     macro_rules !try_rules {
