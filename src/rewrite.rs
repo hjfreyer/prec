@@ -232,6 +232,9 @@ pub enum Rule {
     // Recursion.
     RecElimZ,
     RecElimS,
+
+    EtaAbstractBareZ,
+    EtaAbstractBareS,
 }
 
 impl Rule {
@@ -362,6 +365,36 @@ impl Rule {
                     }
                 }
                 None
+            },
+            Rule::    EtaAbstractBareZ => {
+                let (f, g) = func.decompose()?;
+                f.unrec()?;
+                let (g_car, g_cdr) = g.unstack()?;
+                if let FView::Z = g_car.view() {
+                    let eta_red = Rewrite::new(View::EtaReductionRight(Func::z()), func::Tag::None);
+                    let eta_abs = Rewrite::new(View::Reverse(eta_red), func::Tag::None);
+
+                    let g_rw = Rewrite::new(View::StackCar(eta_abs, g_cdr), *g.tag());
+
+                    Some(View::CompRight(f, g_rw))
+                } else {
+                    None
+                }
+            }
+            Rule::    EtaAbstractBareS => {
+                let (f, g) = func.decompose()?;
+                f.unrec()?;
+                let (g_car, g_cdr) = g.unstack()?;
+                if let FView::S = g_car.view() {
+                    let eta_red = Rewrite::new(View::EtaReductionRight(Func::s()), func::Tag::None);
+                    let eta_abs = Rewrite::new(View::Reverse(eta_red), func::Tag::None);
+
+                    let g_rw = Rewrite::new(View::StackCar(eta_abs, g_cdr), *g.tag());
+
+                    Some(View::CompRight(f, g_rw))
+                } else {
+                    None
+                }
             }
         }
     }
@@ -476,6 +509,8 @@ pub fn reduce_once(func: &Func) -> Option<Rewrite> {
         ProjCdr,
         RecElimZ,
         RecElimS,
+        EtaAbstractBareZ,
+        EtaAbstractBareS,
         EtaReductionLeft,
         EtaReductionRight,
         CompAssoc,
@@ -514,7 +549,6 @@ pub fn reduce_once(func: &Func) -> Option<Rewrite> {
             return Some(p);
         }
     }
-
     None
 }
 
@@ -527,6 +561,13 @@ pub fn reduce_fully(func: &Func) -> Vector<Rewrite> {
     while let Some(rw) = reduce_once(&func) {
         func = rw.endpoints().end().clone();
         res.push_back(rw);
-    }
+           }
     res
 }
+
+
+// (comp (rec Z (comp (comp (rec (proj 0 1) (comp S (stack (proj 2 3) (empty 3)))) (stack (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (comp (rec (comp S (stack Z (empty 0))) (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (proj 0 2) (empty 2)))) (stack (proj 0 2) (empty 2))) (empty 2))) (stack (proj 1 2) (empty 2)))) (stack (proj 1 2) (stack (proj 0 2) (empty 2))))) 
+// (stack (comp 
+//     (rec Z (comp S (stack (comp S (stack (proj 0 2) (empty 2))) (empty 2)))) 
+//        (stack Z (empty 0))) 
+//     (empty 0)))

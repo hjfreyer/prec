@@ -74,7 +74,12 @@ impl fmt::Debug for Stack {
             for _ in (0..self.iter().count() - 1) {
                 fmt.write_str("  ")?
             }
-            fmt.write_fmt(format_args!("{:?} -> {:?}", head.start(), head.end()))
+            if fmt.alternate() {
+           fmt.write_fmt(format_args!("{:#?} -> {:#?}", head.start(), head.end())) 
+            } else {
+                           fmt.write_fmt(format_args!("{:?} -> {:?}", head.start(), head.end()))
+
+            }
         } else {
             fmt.write_str("EMPTY")
         }

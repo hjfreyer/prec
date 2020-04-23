@@ -1,6 +1,7 @@
 #[macro_use]
 mod func;
 mod base;
+mod func_manipulation;
 mod metapath;
 mod path;
 mod pattern;
@@ -83,13 +84,36 @@ fn main() {
 
     // Proof that (half double) = id
     //
-    let (stack, actions) = solve!(
-        func![(half double)], func![(proj 0 1)];
-        tactics::cut(&func![(rec (int 0) (S (proj 0 2)))]);
-        tactics::induction();
-        tactics::simplify();
+    // let (stack, actions) = solve!(
+    //     func![(half double)], func![(proj 0 1)];
+    //     tactics::cut(&func![(rec (int 0) (S (proj 0 2)))]);
+    //     tactics::induction();
+    //     tactics::simplify();
 
-    );
+    // );
+
+    let augmented = 
+        func_manipulation::add_free_variable(func![(half double)]).set_tag(func::Tag::Alias("augmented"));
+    // let (stack, actions) = solve!(func![(augmented (proj 0 1) (const 1 (int 0)))], func![(half double)];
+    //     tactics::simplify();
+    //     // tactics::refl();
+    // );
+
+    println!("readysetgo");
+
+    let steps = rewrite::reduce_fully(
+        &func![(comp (proj 0 2) ((augmented (proj 0 1) (const 1 (int 0))) (int 1)))]);
+    // let steps = rewrite::reduce_fully(
+    //     &func![((half double) (int 0))]);
+    
+    println!("{:?}", steps.head().unwrap().endpoints().start());
+        println!("{:?}", steps.last().unwrap().endpoints().end());
+    for step in steps {
+        // println!("{:?}", step);
+        // println!("{:?}", step.endpoints().end());
+        // println!();
+
+    }
 
     // g = advance(g, &tactics::InductionMatcher(func![(S (proj 0 2))]));
     // g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
