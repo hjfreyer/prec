@@ -1,4 +1,4 @@
-use crate::base::SyntaxEq;
+use crate::base::{SyntaxEq, TypedPoint};
 use itertools::Itertools;
 use std::fmt;
 use std::rc::Rc;
@@ -396,6 +396,10 @@ impl fmt::Debug for Func {
         write(self, fmt)
     }
 }
+
+// impl TypedPoint for Func {
+//     type Type = Func;
+// }
 
 #[macro_export]
 macro_rules! func {

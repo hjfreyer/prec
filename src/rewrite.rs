@@ -2,6 +2,7 @@ use crate::base::{Endpoints, SyntaxEq};
 use crate::func;
 use func::View as FView;
 use func::{BadFunc, Func};
+use im::Vector;
 use std::rc::Rc;
 
 #[derive(Clone, Debug)]
@@ -28,6 +29,14 @@ pub enum View {
     // Recursion.
     RecElimZ(Func, Func, Func, Func),
     RecElimS(Func, Func, func::Tag, Func, Func, Func),
+
+    // Steps in nested structures.
+    CompLeft(Rewrite, Func),
+    CompRight(Func, Rewrite),
+    StackCar(Rewrite, Func),
+    StackCdr(Func, Rewrite),
+    RecZ(Rewrite, Func),
+    RecS(Func, Rewrite),
 }
 
 enum Side {
@@ -133,10 +142,63 @@ impl Rewrite {
                     }
                 }
             }
+
+            _ => panic!("should be handled in endpoints()"),
         }
     }
 
     pub fn endpoints(&self) -> Endpoints<Func> {
+        match &*self.view {
+            View::CompLeft(f_rw, g) => {
+                return Endpoints(
+                    Func::comp(f_rw.endpoints().start().clone(), g.clone())
+                        .unwrap()
+                        .set_tag(self.lhs_tag),
+                    Func::comp(f_rw.endpoints().end().clone(), g.clone()).unwrap(),
+                )
+            }
+            View::CompRight(f, g_rw) => {
+                return Endpoints(
+                    Func::comp(f.clone(), g_rw.endpoints().start().clone())
+                        .unwrap()
+                        .set_tag(self.lhs_tag),
+                    Func::comp(f.clone(), g_rw.endpoints().end().clone()).unwrap(),
+                )
+            }
+            View::StackCar(car_rw, cdr) => {
+                return Endpoints(
+                    Func::stack(car_rw.endpoints().start().clone(), cdr.clone())
+                        .unwrap()
+                        .set_tag(self.lhs_tag),
+                    Func::stack(car_rw.endpoints().end().clone(), cdr.clone()).unwrap(),
+                )
+            }
+            View::StackCdr(car, cdr_rw) => {
+                return Endpoints(
+                    Func::stack(car.clone(), cdr_rw.endpoints().start().clone())
+                        .unwrap()
+                        .set_tag(self.lhs_tag),
+                    Func::stack(car.clone(), cdr_rw.endpoints().end().clone()).unwrap(),
+                )
+            }
+            View::RecZ(z_rw, s_case) => {
+                return Endpoints(
+                    Func::rec(z_rw.endpoints().start().clone(), s_case.clone())
+                        .unwrap()
+                        .set_tag(self.lhs_tag),
+                    Func::rec(z_rw.endpoints().end().clone(), s_case.clone()).unwrap(),
+                )
+            }
+            View::RecS(z_case, s_rw) => {
+                return Endpoints(
+                    Func::rec(z_case.clone(), s_rw.endpoints().start().clone())
+                        .unwrap()
+                        .set_tag(self.lhs_tag),
+                    Func::rec(z_case.clone(), s_rw.endpoints().end().clone()).unwrap(),
+                )
+            }
+            _ => (),
+        }
         let start = self
             .try_side(Side::Left)
             .expect("validated on matching")
@@ -299,6 +361,25 @@ impl Rule {
     }
 }
 
+
+
+pub trait Tactic {
+    // Note: tactics use opposite conventions for "start" and "end".
+    fn apply(&self, end_func: &Func) -> Option<(Func, Vector<Rewrite>)>;
+}
+
+pub fn reduce_fully_tactic() -> impl Tactic {
+    struct Impl();
+    impl Tactic for Impl {
+        fn apply(&self, end_func: &Func) -> Option<(Func, Vector<Rewrite>)> {
+            let reduced : im::Vector<_> = reduce_fully(end_func).into_iter().rev().collect();
+            let head = reduced.head()?;
+            Some((head.endpoints().end().clone(), reduced))
+        }
+    }
+    Impl()
+}
+
 pub trait EndMatcher {
     fn match_end(&self, func: &Func) -> Option<Rewrite>;
 }
@@ -343,3 +424,73 @@ pub fn comp_factor_stack() -> impl EndMatcher {
 
 // CompDistributeEmpty,
 //    CompDistributeStack
+
+pub fn reduce_once(func: &Func) -> Option<Rewrite> {
+    macro_rules !try_rules {
+        ($($rule:ident),*) => {
+            None
+            $(.or_else(|| Rule::$rule.match_start(func)))*
+        }
+    }
+
+    let rw_reduction = try_rules!(
+        ProjCar,
+        ProjCdr,
+        ProjCar,
+        ProjCdr,
+        RecElimZ,
+        RecElimS,
+        EtaReductionLeft,
+        EtaReductionRight,
+        CompAssoc,
+        CompDistributeEmpty,
+        CompDistributeStack
+    );
+    if let Some(rw) = rw_reduction {
+        return Some(rw);
+    }
+
+    if let FView::Comp(f, g) = func.view() {
+        let opt = None
+            .or_else(|| {
+                reduce_once(f)
+                    .map(|rw| Rewrite::new(View::CompLeft(rw, g.clone()), func.tag().clone()))
+            })
+            .or_else(|| {
+                reduce_once(g)
+                    .map(|rw| Rewrite::new(View::CompRight(f.clone(), rw), func.tag().clone()))
+            });
+        if let Some(p) = opt {
+            return Some(p);
+        }
+    }
+    if let FView::Stack(car, cdr) = func.view() {
+        let opt = None
+            .or_else(|| {
+                reduce_once(car)
+                    .map(|rw| Rewrite::new(View::StackCar(rw, cdr.clone()), func.tag().clone()))
+            })
+            .or_else(|| {
+                reduce_once(cdr)
+                    .map(|rw| Rewrite::new(View::StackCdr(car.clone(), rw), func.tag().clone()))
+            });
+        if let Some(p) = opt {
+            return Some(p);
+        }
+    }
+
+    None
+}
+
+// Returns a path starting with f and leading to a reduced form.
+pub fn reduce_fully(func: &Func) -> Vector<Rewrite> {
+    let mut res = Vector::new();
+    let mut func = func.clone();
+    // let mut res = Path::validate(View::Refl(func.clone())).unwrap();
+
+    while let Some(rw) = reduce_once(&func) {
+        func = rw.endpoints().end().clone();
+        res.push_back(rw);
+    }
+    res
+}
