@@ -59,7 +59,7 @@ impl Rewrite {
             // Projection.
             View::ProjCar(stack_car, stack_cdr) => match side {
                 Side::Left => {
-                    let select_arity = stack_cdr.arity().out() + 1;
+                    let select_arity = stack_cdr.arity().out + 1;
                     Func::comp(
                         Func::proj(0, select_arity)?,
                         Func::stack(stack_car, stack_cdr)?,
@@ -69,14 +69,14 @@ impl Rewrite {
             },
             View::ProjCdr(select, stack_car, stack_cdr) => match side {
                 Side::Left => {
-                    let arity = stack_cdr.arity().out() + 1;
+                    let arity = stack_cdr.arity().out + 1;
                     Func::comp(
                         Func::proj(select, arity)?,
                         Func::stack(stack_car, stack_cdr)?,
                     )
                 }
                 Side::Right => {
-                    let arity = stack_cdr.arity().out() + 1;
+                    let arity = stack_cdr.arity().out + 1;
                     Func::comp(Func::proj(select - 1, arity - 1)?, stack_cdr)
                 }
             },
@@ -87,8 +87,8 @@ impl Rewrite {
                 Side::Right => Ok(Func::comp(f, Func::comp(g, h)?)?),
             },
             View::CompDistributeEmpty(g) => match side {
-                Side::Left => Ok(Func::comp(Func::empty(g.arity().out()), g)?),
-                Side::Right => Ok(Func::empty(g.arity().r#in())),
+                Side::Left => Ok(Func::comp(Func::empty(g.arity().out), g)?),
+                Side::Right => Ok(Func::empty(g.arity().r#in)),
             },
             View::CompDistributeStack(stack_car, stack_cdr, g) => match side {
                 Side::Left => Ok(Func::comp(Func::stack(stack_car, stack_cdr)?, g)?),
@@ -101,14 +101,14 @@ impl Rewrite {
             // Eta.
             View::EtaReductionLeft(g) => match side {
                 Side::Left => {
-                    let eye = Func::eye(g.arity().out());
+                    let eye = Func::eye(g.arity().out);
                     Ok(Func::comp(eye, g)?)
                 }
                 Side::Right => Ok(g),
             },
             View::EtaReductionRight(f) => match side {
                 Side::Left => {
-                    let eye = Func::eye(f.arity().r#in());
+                    let eye = Func::eye(f.arity().r#in);
                     Ok(Func::comp(f, eye)?)
                 }
                 Side::Right => Ok(f),
@@ -153,7 +153,7 @@ impl Rewrite {
         match &*self.view {
             View::Reverse(rw) => {
                 let Endpoints(start, end) = rw.endpoints();
-                return Endpoints(end, start)
+                return Endpoints(end, start);
             }
             View::CompLeft(f_rw, g) => {
                 return Endpoints(
@@ -300,7 +300,7 @@ impl Rule {
 
             Rule::EtaReductionLeft => {
                 if let FView::Comp(f, g) = func.into_view() {
-                    if f.syntax_eq(&Func::eye(g.arity().out())) {
+                    if f.syntax_eq(&Func::eye(g.arity().out)) {
                         Some(View::EtaReductionLeft(g))
                     } else {
                         None
@@ -311,7 +311,7 @@ impl Rule {
             }
             Rule::EtaReductionRight => {
                 if let FView::Comp(f, g) = func.into_view() {
-                    if g.syntax_eq(&Func::eye(f.arity().r#in())) {
+                    if g.syntax_eq(&Func::eye(f.arity().r#in)) {
                         Some(View::EtaReductionRight(f))
                     } else {
                         None
@@ -388,7 +388,6 @@ pub fn reduce_fully_tactic() -> impl Tactic {
 //     match func.view()
 // }
 
-
 // pub fn factor_helper(func: &Func, factored: &Func) -> Option<Rewrite> {
 //     if func.syntax_eq(factored) {
 //         return None
@@ -401,21 +400,20 @@ pub fn reduce_fully_tactic() -> impl Tactic {
 //     }
 // }
 
-// (maybe_increment (not (not (is_even double))) (maybe_increment (not (is_even double)) (half double))) 
-
+// (maybe_increment (not (not (is_even double))) (maybe_increment (not (is_even double)) (half double)))
 
 // pub fn factor(factored: &Func) -> impl Tactic {
 
 // }
 
-// (comp 
-//     (rec (proj 0 1) (comp S (stack (proj 2 3) (empty 3)))) 
-//     (stack 
-//         (comp 
-//             (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) 
-//             (stack 
-//                 (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) 
-//                     (stack (comp (rec 
+// (comp
+//     (rec (proj 0 1) (comp S (stack (proj 2 3) (empty 3))))
+//     (stack
+//         (comp
+//             (rec (comp S (stack Z (empty 0))) (comp Z (empty 2)))
+//             (stack
+//                 (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2)))
+//                     (stack (comp (rec
 //                         (comp S (stack Z (empty 0))) (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (proj 0 2) (empty 2)))) (stack (rec Z (comp S (stack (comp S (stack (proj 0 2) (empty 2))) (empty 2)))) (empty 1))) (empty 1))) (empty 1))) (stack (comp (rec (proj 0 1) (comp S (stack (proj 2 3) (empty 3)))) (stack (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (comp (rec (comp S (stack Z (empty 0))) (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (proj 0 2) (empty 2)))) (stack (rec Z (comp S (stack (comp S (stack (proj 0 2) (empty 2))) (empty 2)))) (empty 1))) (empty 1))) (stack (comp (rec Z (comp (comp (rec (proj 0 1) (comp S (stack (proj 2 3) (empty 3)))) (stack (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (comp (rec (comp S (stack Z (empty 0))) (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (proj 0 2) (empty 2)))) (stack (proj 0 2) (empty 2))) (empty 2))) (stack (proj 1 2) (empty 2)))) (stack (proj 1 2) (stack (proj 0 2) (empty 2))))) (stack (rec Z (comp S (stack (comp S (stack (proj 0 2) (empty 2))) (empty 2)))) (empty 1))) (empty 1)))) (empty 1)))) -> (S (half double))
 
 pub trait EndMatcher {

@@ -48,7 +48,6 @@ fn main() {
 
     //    let mut g = im::vector![Endpoints(_t4, func![(int 1)])];
 
-
     macro_rules! solve {
         ($a:expr, $b: expr; $($tactic:expr;)*) => {
             {

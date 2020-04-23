@@ -40,7 +40,7 @@ pub fn induction() -> impl Tactic {
             &self,
             Endpoints(f, rec): &Endpoints<Func>,
         ) -> Option<(Endpoints<Func>, Vector<Action>)> {
-            let f_arity = f.arity().r#in();
+            let f_arity = f.arity().r#in;
             let (z_case, s_case) = rec.unrec()?;
             let (z_f, z_g) = z_case.decompose()?;
             if !z_f.syntax_eq(f) || !z_g.syntax_eq(&Func::z_eye(f_arity)) {
@@ -155,7 +155,7 @@ pub fn rec_z() -> impl Tactic {
 //             View::Induction(f, s_case, _) => Endpoints(
 //                 f.clone(),
 //                 Func::rec(
-//                     Func::comp(f.clone(), Func::z_eye(f.arity().r#in())).unwrap(),
+//                     Func::comp(f.clone(), Func::z_eye(f.arity().r#in)).unwrap(),
 //                     s_case.clone(),
 //                 )
 //                 .unwrap(),

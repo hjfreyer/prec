@@ -221,7 +221,7 @@ pub fn induction() -> impl Tactic {
         fn apply(&self, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
             let Endpoints(f, rec) = stack.head()?;
             let (z_case, s_case) = rec.unrec()?;
-            let f_arity = f.arity().r#in();
+            let f_arity = f.arity().r#in;
             let mid = Func::rec(Func::comp(f, Func::z_eye(f_arity)).unwrap(), s_case).unwrap();
             apply_cut(&mid, stack)
         }

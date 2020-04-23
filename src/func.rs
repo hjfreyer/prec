@@ -24,16 +24,10 @@ pub enum View {
 #[derive(Clone)]
 pub struct Func(Rc<View>, Tag);
 
-#[derive(Debug)]
-pub struct Arity(pub u32, pub u32);
-
-impl Arity {
-    pub fn out(&self) -> u32 {
-        self.0
-    }
-    pub fn r#in(&self) -> u32 {
-        self.1
-    }
+#[derive(Debug, Clone, Copy)]
+pub struct Arity {
+    pub out: u32,
+    pub r#in: u32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -76,13 +70,12 @@ impl Func {
     }
 
     pub fn stack(car: Func, cdr: Func) -> Result<Func, BadFunc> {
-        let Arity(car_out, car_in) = car.arity();
-        let Arity(_, cdr_in) = cdr.arity();
+        let car_arity = car.arity();
 
-        if car_out != 1 {
+        if car_arity.out != 1 {
             return Err(BadFunc::StackCarOutArityMustBe1(car));
         }
-        if car_in != cdr_in {
+        if car_arity.r#in != cdr.arity().r#in {
             return Err(BadFunc::StackArityMismatch(car, cdr));
         }
 
@@ -95,9 +88,7 @@ impl Func {
             _ => return Err(BadFunc::CompRightMustBeCompOrStack(f, g)),
         }
 
-        let Arity(_f_out, f_in) = f.arity();
-        let Arity(g_out, _g_in) = g.arity();
-        if f_in != g_out {
+        if f.arity().r#in != g.arity().out {
             Err(BadFunc::CompArityMismatch(f, g))
         } else {
             Ok(Func(Rc::new(View::Comp(f, g)), Tag::None))
@@ -105,15 +96,15 @@ impl Func {
     }
 
     pub fn rec(z_case: Func, s_case: Func) -> Result<Func, BadFunc> {
-        let Arity(z_out, z_in) = z_case.arity();
-        let Arity(s_out, s_in) = s_case.arity();
-        if z_out != 1 {
+        let z_arity = z_case.arity();
+        let s_arity = s_case.arity();
+        if z_arity.out != 1 {
             return Err(BadFunc::RecZCaseOutArityMustBe1(z_case));
         }
-        if s_out != 1 {
+        if s_arity.out != 1 {
             return Err(BadFunc::RecSCaseOutArityMustBe1(s_case));
         }
-        if z_in + 2 != s_in {
+        if z_arity.r#in + 2 != s_arity.r#in {
             return Err(BadFunc::RecArityMismatch(z_case, s_case));
         }
 
@@ -137,8 +128,7 @@ impl Func {
         if gs.is_empty() {
             panic!("can't apply, use const instead")
         }
-        let Arity(_, g_in) = gs[0].arity();
-        let mut g_stack = Func::empty(g_in);
+        let mut g_stack = Func::empty(gs[0].arity().r#in);
 
         for g in gs.iter().rev() {
             g_stack = Func::stack(g.clone(), g_stack)?
@@ -195,23 +185,31 @@ impl Func {
 
     pub fn arity(&self) -> Arity {
         match self.view() {
-            View::Z => Arity(1, 0),
-            View::S => Arity(1, 1),
-            &View::Proj(_, arity) => Arity(1, arity),
-            &View::Empty(arity) => Arity(0, arity),
+            View::Z => Arity { out: 1, r#in: 0 },
+            View::S => Arity { out: 1, r#in: 1 },
+            &View::Proj(_, arity) => Arity {
+                out: 1,
+                r#in: arity,
+            },
+            &View::Empty(arity) => Arity {
+                out: 0,
+                r#in: arity,
+            },
             View::Stack(_, cdr) => {
-                let Arity(cdr_out, cdr_in) = cdr.arity();
-                Arity(cdr_out + 1, cdr_in)
+                let cdra = cdr.arity();
+                Arity {
+                    out: cdra.out + 1,
+                    r#in: cdra.r#in,
+                }
             }
-            View::Comp(f, g) => {
-                let Arity(f_out, _) = f.arity();
-                let Arity(_, g_in) = g.arity();
-                Arity(f_out, g_in)
-            }
-            View::Rec(z_case, _) => {
-                let Arity(_, z_in) = z_case.arity();
-                Arity(1, z_in + 1)
-            }
+            View::Comp(f, g) => Arity {
+                out: f.arity().out,
+                r#in: g.arity().r#in,
+            },
+            View::Rec(z_case, _) => Arity {
+                out: 1,
+                r#in: z_case.arity().r#in + 1,
+            },
         }
     }
 
@@ -253,7 +251,7 @@ impl Func {
                 }
                 _ => StackHelper {
                     args: vec![func.clone()],
-                    arity_in: func.arity().r#in(),
+                    arity_in: func.arity().r#in,
                 },
             }
         }
