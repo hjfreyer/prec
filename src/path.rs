@@ -29,8 +29,6 @@ pub enum View {
     RecS(Func),
 }
 
-
-
 pub trait Tactic {
     fn apply(&self, ep: &Endpoints<Func>) -> Option<(Endpoints<Func>, Vector<Action>)>;
 }
@@ -38,21 +36,28 @@ pub trait Tactic {
 pub fn induction() -> impl Tactic {
     struct Impl();
     impl Tactic for Impl {
-        fn apply(&self, Endpoints(f, rec): &Endpoints<Func>) -> Option<(Endpoints<Func>, Vector<Action>)> {
+        fn apply(
+            &self,
+            Endpoints(f, rec): &Endpoints<Func>,
+        ) -> Option<(Endpoints<Func>, Vector<Action>)> {
             let f_arity = f.arity().r#in();
             let (z_case, s_case) = rec.unrec()?;
             let (z_f, z_g) = z_case.decompose()?;
             if !z_f.syntax_eq(f) || !z_g.syntax_eq(&Func::z_eye(f_arity)) {
-                return None
+                return None;
             }
 
             let start_start = Func::comp(f.clone(), Func::s_eye(f_arity)).unwrap();
             let start_end = Func::comp(
                 s_case.clone(),
                 Func::stack(f.clone(), Func::eye(f_arity)).unwrap(),
-            ).unwrap();
+            )
+            .unwrap();
 
-            Some((Endpoints(start_start, start_end), im::vector![Action(View::Induction)]))
+            Some((
+                Endpoints(start_start, start_end),
+                im::vector![Action(View::Induction)],
+            ))
         }
     }
     Impl()
@@ -71,33 +76,50 @@ pub fn induction() -> impl Tactic {
 //     Impl(t)
 // }
 
-
-impl <RW : rewrite::Tactic> Tactic for RW {
+impl<RW: rewrite::Tactic> Tactic for RW {
     fn apply(&self, end_path: &Endpoints<Func>) -> Option<(Endpoints<Func>, Vector<Action>)> {
-            let (rewritten, rewrites) = self.apply(end_path.end())?;
-            let wrapped_rewrites = rewrites.into_iter().map(|rw| Action(View::Extend(rw))).collect();
-            Some((Endpoints(end_path.start().clone(), rewritten), wrapped_rewrites))
+        let (rewritten, rewrites) = self.apply(end_path.end())?;
+        let wrapped_rewrites = rewrites
+            .into_iter()
+            .map(|rw| Action(View::Extend(rw)))
+            .collect();
+        Some((
+            Endpoints(end_path.start().clone(), rewritten),
+            wrapped_rewrites,
+        ))
     }
 }
 
-pub fn reverse() -> impl Tactic {    
+pub fn reverse() -> impl Tactic {
     struct Impl();
-     impl Tactic for Impl {
-        fn apply(&self, Endpoints(start, end): &Endpoints<Func>) -> Option<(Endpoints<Func>, Vector<Action>)> {
-            Some((Endpoints(end.clone(), start.clone()), im::vector![Action(View::Reverse)]))
+    impl Tactic for Impl {
+        fn apply(
+            &self,
+            Endpoints(start, end): &Endpoints<Func>,
+        ) -> Option<(Endpoints<Func>, Vector<Action>)> {
+            Some((
+                Endpoints(end.clone(), start.clone()),
+                im::vector![Action(View::Reverse)],
+            ))
         }
     }
     Impl()
 }
 
-pub fn rec_z() -> impl Tactic {    
+pub fn rec_z() -> impl Tactic {
     struct Impl();
-     impl Tactic for Impl {
-        fn apply(&self, Endpoints(start, end): &Endpoints<Func>) -> Option<(Endpoints<Func>, Vector<Action>)> {
+    impl Tactic for Impl {
+        fn apply(
+            &self,
+            Endpoints(start, end): &Endpoints<Func>,
+        ) -> Option<(Endpoints<Func>, Vector<Action>)> {
             let (start_z, start_s) = start.unrec()?;
             let (end_z, end_s) = end.unrec()?;
             if start_s.syntax_eq(&end_s) {
-               Some((Endpoints(start_z, end_z), im::vector![Action(View::RecZ(start_s))]))
+                Some((
+                    Endpoints(start_z, end_z),
+                    im::vector![Action(View::RecZ(start_s))],
+                ))
             } else {
                 None
             }

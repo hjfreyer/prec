@@ -14,8 +14,6 @@ use im;
 use im::vector::Vector;
 use tactics::Tactic;
 
-
-
 fn advance<M: tactics::Tactic>(g: tactics::Stack, m: M) -> tactics::Stack {
     let g = m.apply(&g).unwrap().0;
     println!("{:?}", g);
@@ -50,42 +48,49 @@ fn main() {
 
     //    let mut g = im::vector![Endpoints(_t4, func![(int 1)])];
 
+
+    macro_rules! solve {
+        ($a:expr, $b: expr; $($tactic:expr;)*) => {
+            {
+                let mut stack = tactics::Stack::new().push(Endpoints($a, $b));
+                let mut actions : im::Vector<tactics::StackAction>= im::Vector::new();
+                println!("{:?}", stack);
+                $(
+                    {
+                        let (new_stack, new_actions) = $tactic.apply(&stack).unwrap();
+                        stack = new_stack;
+                        actions.extend(new_actions);
+                        println!("{:?}", stack);
+                    }
+                )*
+                (stack, actions)
+            }
+        }
+    }
+
     // Proof that ed = 1
-
-    let mut g =
-        tactics::Stack::new().push(Endpoints(func![(is_even double)], func![(const 1 (int 1))]));
-    println!("{:?}", g);
-
-    g = advance(g, tactics::cut(&func![(rec (int 1) ((not not) (proj 0 2)))]));
-    g = advance(g, tactics::induction());
-    g = advance(g, tactics::auto());
-    g = advance(g, tactics::auto());
-    g = advance(g, path::reverse());
-    g = advance(g, tactics::induction());
-    g = advance(g, tactics::auto());
-    g = advance(g, tactics::auto());
-    // g = advance(g, rewrite::reduce_fully_tactic());
-    // g = advance(g, tactics::refl());
-
-    // g = advance(g, &tactics::InductionMatcher(func![((not not) (proj 0 2))]));
-    // g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
-    // g = advance(g, &tactics::PushReflMatcher());
-    // g = advance(g, &tactics::LiftMatcher(metapath::ReverseMatcher()));
-    // g = advance(g, &tactics::InductionMatcher(func![((not not) (proj 0 2))]));
-    // g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
-    // g = advance(g, &tactics::PushReflMatcher());
-    // g = advance(g, &tactics::RecSplitMatcher());
-    // g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));
-    // g = advance(g, &tactics::PushReflMatcher());
-    //    g = advance(g, &tactics::PushReflMatcher());
+    //
+    // let (stack, actions) = solve!(
+    //     func![(is_even double)], func![(const 1 (int 1))];
+    //     tactics::cut(&func![(rec (int 1) ((not not) (proj 0 2)))]);
+    //     tactics::induction();
+    //     tactics::auto();
+    //     tactics::auto();
+    //     path::reverse();
+    //     tactics::induction();
+    //     tactics::auto();
+    //     tactics::auto();
+    // );
 
     // Proof that (half double) = id
     //
-    // let mut g = tactics::ContextSpec::cons(
-    //     Endpoints(func![(half double)], func![(proj 0 1)]),
-    //     tactics::ContextSpec::Empty,
-    // );
-    // println!("{:?}", g);
+    let (stack, actions) = solve!(
+        func![(half double)], func![(proj 0 1)];
+        tactics::cut(&func![(rec (int 0) (S (proj 0 2)))]);
+        tactics::induction();
+        tactics::simplify();
+
+    );
 
     // g = advance(g, &tactics::InductionMatcher(func![(S (proj 0 2))]));
     // g = advance(g, &tactics::LiftMatcher(metapath::SimplifyMatcher()));

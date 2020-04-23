@@ -13,6 +13,8 @@ pub struct Rewrite {
 
 #[derive(Clone, Debug)]
 pub enum View {
+    Reverse(Rewrite),
+
     // Projection
     ProjCar(Func, Func),
     ProjCdr(u32, Func, Func),
@@ -149,6 +151,10 @@ impl Rewrite {
 
     pub fn endpoints(&self) -> Endpoints<Func> {
         match &*self.view {
+            View::Reverse(rw) => {
+                let Endpoints(start, end) = rw.endpoints();
+                return Endpoints(end, start)
+            }
             View::CompLeft(f_rw, g) => {
                 return Endpoints(
                     Func::comp(f_rw.endpoints().start().clone(), g.clone())
@@ -361,8 +367,6 @@ impl Rule {
     }
 }
 
-
-
 pub trait Tactic {
     // Note: tactics use opposite conventions for "start" and "end".
     fn apply(&self, end_func: &Func) -> Option<(Func, Vector<Rewrite>)>;
@@ -372,13 +376,47 @@ pub fn reduce_fully_tactic() -> impl Tactic {
     struct Impl();
     impl Tactic for Impl {
         fn apply(&self, end_func: &Func) -> Option<(Func, Vector<Rewrite>)> {
-            let reduced : im::Vector<_> = reduce_fully(end_func).into_iter().rev().collect();
-            let head = reduced.head()?;
-            Some((head.endpoints().end().clone(), reduced))
+            let reduced = reduce_fully(end_func);
+            let last = reduced.last()?;
+            Some((last.endpoints().end().clone(), reduced))
         }
     }
     Impl()
 }
+
+// pub fn add_free_variable(func: &Func) -> Func {
+//     match func.view()
+// }
+
+
+// pub fn factor_helper(func: &Func, factored: &Func) -> Option<Rewrite> {
+//     if func.syntax_eq(factored) {
+//         return None
+//     }
+//     match func.view() {
+//         FView::Z => None,
+//         FView::S => None,
+//         FView::Proj(_, _) => None,
+//         FView::Empty(_) => None,
+//     }
+// }
+
+// (maybe_increment (not (not (is_even double))) (maybe_increment (not (is_even double)) (half double))) 
+
+
+// pub fn factor(factored: &Func) -> impl Tactic {
+
+// }
+
+// (comp 
+//     (rec (proj 0 1) (comp S (stack (proj 2 3) (empty 3)))) 
+//     (stack 
+//         (comp 
+//             (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) 
+//             (stack 
+//                 (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) 
+//                     (stack (comp (rec 
+//                         (comp S (stack Z (empty 0))) (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (proj 0 2) (empty 2)))) (stack (rec Z (comp S (stack (comp S (stack (proj 0 2) (empty 2))) (empty 2)))) (empty 1))) (empty 1))) (empty 1))) (stack (comp (rec (proj 0 1) (comp S (stack (proj 2 3) (empty 3)))) (stack (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (comp (rec (comp S (stack Z (empty 0))) (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (proj 0 2) (empty 2)))) (stack (rec Z (comp S (stack (comp S (stack (proj 0 2) (empty 2))) (empty 2)))) (empty 1))) (empty 1))) (stack (comp (rec Z (comp (comp (rec (proj 0 1) (comp S (stack (proj 2 3) (empty 3)))) (stack (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (comp (rec (comp S (stack Z (empty 0))) (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (proj 0 2) (empty 2)))) (stack (proj 0 2) (empty 2))) (empty 2))) (stack (proj 1 2) (empty 2)))) (stack (proj 1 2) (stack (proj 0 2) (empty 2))))) (stack (rec Z (comp S (stack (comp S (stack (proj 0 2) (empty 2))) (empty 2)))) (empty 1))) (empty 1)))) (empty 1)))) -> (S (half double))
 
 pub trait EndMatcher {
     fn match_end(&self, func: &Func) -> Option<Rewrite>;

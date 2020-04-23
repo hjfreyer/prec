@@ -1,8 +1,8 @@
 use crate::base::{Endpoints, SyntaxEq, Transform, TypedPoint};
 use crate::func;
 use crate::func::{BadFunc, Func, View as FView};
-use crate::path::{Action as PAction, View as PView};
 use crate::path;
+use crate::path::{Action as PAction, View as PView};
 use crate::rewrite;
 use im::vector::Vector;
 use std::fmt;
@@ -47,7 +47,7 @@ impl Stack {
     pub fn head(&self) -> Option<Endpoints<Func>> {
         match self.view() {
             StackView::Empty => None,
-            StackView::Cons(car, _) => Some(car.clone())
+            StackView::Cons(car, _) => Some(car.clone()),
         }
     }
     pub fn snoc(&self) -> Option<(Endpoints<Func>, Stack)> {
@@ -71,11 +71,10 @@ impl Stack {
 impl fmt::Debug for Stack {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(head) = self.iter().next() {
-        for _ in (0..self.iter().count() - 1) {
-            fmt.write_str("  ")?
-        }
+            for _ in (0..self.iter().count() - 1) {
+                fmt.write_str("  ")?
+            }
             fmt.write_fmt(format_args!("{:?} -> {:?}", head.start(), head.end()))
-
         } else {
             fmt.write_str("EMPTY")
         }
@@ -114,7 +113,10 @@ pub fn refl() -> impl Tactic {
         fn apply(&self, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
             let (Endpoints(start, end), cdr) = stack.snoc()?;
             if start.syntax_eq(&end) {
-                Some((cdr, im::vector![StackAction(Rc::new(StackActionView::PushRefl(start)))]))
+                Some((
+                    cdr,
+                    im::vector![StackAction(Rc::new(StackActionView::PushRefl(start)))],
+                ))
             } else {
                 None
             }
@@ -123,15 +125,15 @@ pub fn refl() -> impl Tactic {
     Impl()
 }
 
-fn apply_cut(mid : &Func, stack: &Stack)-> Option<(Stack, Vector<StackAction>)> {
-            let (Endpoints(start, end), cdr) = stack.snoc()?;
-            let new_stack = cdr
-                .push(Endpoints(mid.clone(), end))
-                .push(Endpoints(start, mid.clone()));
-            Some((
-                new_stack,
-                im::vector![StackAction(Rc::new(StackActionView::HorizontalConcat))],
-            ))
+fn apply_cut(mid: &Func, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
+    let (Endpoints(start, end), cdr) = stack.snoc()?;
+    let new_stack = cdr
+        .push(Endpoints(mid.clone(), end))
+        .push(Endpoints(start, mid.clone()));
+    Some((
+        new_stack,
+        im::vector![StackAction(Rc::new(StackActionView::HorizontalConcat))],
+    ))
 }
 
 pub fn cut(func: &Func) -> impl Tactic {
@@ -154,84 +156,92 @@ pub fn cut(func: &Func) -> impl Tactic {
 //     }
 // }
 
-struct CarTactic<T : path::Tactic>(T);
+struct CarTactic<T: path::Tactic>(T);
 
-    impl <T : path::Tactic> Tactic for CarTactic<T> {
-        fn apply(&self, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
-            let Self(pt) = self;
-            let (car, cdr) = stack.snoc()?;
-            let (eps, actions) = pt.apply(&car)?;
-            let new_stack = cdr.push(eps);
-            let new_actions = actions.into_iter().map(|a| StackAction(Rc::new(StackActionView::CarApply(a)))).collect();
-            Some((new_stack, new_actions))
-        }
-    }
-
-
-struct CdrTactic<T : Tactic>(T);
-
-    impl <T : Tactic> Tactic for CdrTactic<T> {
-        fn apply(&self, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
-            let Self(t) = self;
-            let (car, cdr) = stack.snoc()?;
-            let (stack, actions) = t.apply(&cdr)?;
-            let new_stack = stack.push(car);
-            let new_actions = actions.into_iter().map(|a| StackAction(Rc::new(StackActionView::CdrApply(a)))).collect();
-            Some((new_stack, new_actions))
-        }
-    }
-
-pub fn lift<T: path::Tactic>(t : T) -> impl Tactic {
-    CarTactic(t)
-}
-
-impl <P : path::Tactic> Tactic for P {
+impl<T: path::Tactic> Tactic for CarTactic<T> {
     fn apply(&self, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
+        let Self(pt) = self;
         let (car, cdr) = stack.snoc()?;
-        let (eps, actions) = self.apply(&car)?;
+        let (eps, actions) = pt.apply(&car)?;
         let new_stack = cdr.push(eps);
-        let new_actions = actions.into_iter().map(|a| StackAction(Rc::new(StackActionView::CarApply(a)))).collect();
+        let new_actions = actions
+            .into_iter()
+            .map(|a| StackAction(Rc::new(StackActionView::CarApply(a))))
+            .collect();
         Some((new_stack, new_actions))
     }
 }
 
-struct ComposeTactics<T1 : Tactic, T2:Tactic>(T1, T2);
-impl <T1 : Tactic, T2:Tactic> Tactic for ComposeTactics<T1,T2> {
+struct CdrTactic<T: Tactic>(T);
+
+impl<T: Tactic> Tactic for CdrTactic<T> {
+    fn apply(&self, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
+        let Self(t) = self;
+        let (car, cdr) = stack.snoc()?;
+        let (stack, actions) = t.apply(&cdr)?;
+        let new_stack = stack.push(car);
+        let new_actions = actions
+            .into_iter()
+            .map(|a| StackAction(Rc::new(StackActionView::CdrApply(a))))
+            .collect();
+        Some((new_stack, new_actions))
+    }
+}
+
+pub fn lift<T: path::Tactic>(t: T) -> impl Tactic {
+    CarTactic(t)
+}
+
+impl<P: path::Tactic> Tactic for P {
+    fn apply(&self, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
+        let (car, cdr) = stack.snoc()?;
+        let (eps, actions) = self.apply(&car)?;
+        let new_stack = cdr.push(eps);
+        let new_actions = actions
+            .into_iter()
+            .map(|a| StackAction(Rc::new(StackActionView::CarApply(a))))
+            .collect();
+        Some((new_stack, new_actions))
+    }
+}
+
+struct ComposeTactics<T1: Tactic, T2: Tactic>(T1, T2);
+impl<T1: Tactic, T2: Tactic> Tactic for ComposeTactics<T1, T2> {
     fn apply(&self, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
         let Self(t1, t2) = self;
         let (stack1, actions1) = t1.apply(&stack)?;
         let (stack2, actions2) = t2.apply(&stack1)?;
-        // TODO: actions1 and actions2 might be backwards.
-        Some((stack2, actions2 + actions1))
+        Some((stack2, actions1 + actions2))
     }
 }
 
 pub fn induction() -> impl Tactic {
-
-struct Cut();
-impl Tactic for Cut {
+    struct Cut();
+    impl Tactic for Cut {
         fn apply(&self, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
             let Endpoints(f, rec) = stack.head()?;
             let (z_case, s_case) = rec.unrec()?;
             let f_arity = f.arity().r#in();
             let mid = Func::rec(Func::comp(f, Func::z_eye(f_arity)).unwrap(), s_case).unwrap();
-    apply_cut(&mid, stack)
+            apply_cut(&mid, stack)
         }
-
-}
-        ComposeTactics(Cut(), ComposeTactics(path::induction(), CdrTactic(path::rec_z())))
+    }
+    ComposeTactics(
+        Cut(),
+        ComposeTactics(path::induction(), CdrTactic(path::rec_z())),
+    )
 
     // struct Impl();
     // impl Tactic for Impl {
     //     fn apply(&self, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
-            
+
     //     }
     // }
     // Impl();
 }
 
-struct TryTactic<T : Tactic>(T);
-impl <T : Tactic> Tactic for TryTactic<T> {
+struct TryTactic<T: Tactic>(T);
+impl<T: Tactic> Tactic for TryTactic<T> {
     fn apply(&self, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
         let Self(t) = self;
         if let res @ Some(_) = t.apply(stack) {
@@ -242,11 +252,14 @@ impl <T : Tactic> Tactic for TryTactic<T> {
     }
 }
 
-
 pub fn simplify() -> impl Tactic {
-    ComposeTactics(TryTactic(rewrite::reduce_fully_tactic()),
-            ComposeTactics(path::reverse(), 
-                ComposeTactics(TryTactic(rewrite::reduce_fully_tactic()), path::reverse())))
+    ComposeTactics(
+        TryTactic(rewrite::reduce_fully_tactic()),
+        ComposeTactics(
+            path::reverse(),
+            ComposeTactics(TryTactic(rewrite::reduce_fully_tactic()), path::reverse()),
+        ),
+    )
     // struct Impl();
     // impl Tactic for Impl {
     //     fn apply(&self, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
@@ -276,8 +289,6 @@ pub fn auto() -> impl Tactic {
     // }
     // Impl()
 }
-
-
 
 // pub struct Induction(metapath::Induction, Func, ContextSpec);
 
@@ -313,9 +324,6 @@ pub fn auto() -> impl Tactic {
 //         None
 //     }
 // }
-
-
-
 
 // // trait Tactic3 {
 // //     fn step_backwards(&self, eps : EndpointsStack) -> Option<(EndpointsStack, Vector<StackAction>)>

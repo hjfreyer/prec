@@ -18,13 +18,11 @@ impl Func {
         }
     }
 
-        pub fn unrec(&self) -> Option<(Func, Func)> {
+    pub fn unrec(&self) -> Option<(Func, Func)> {
         if let FView::Rec(z_case, s_case) = self.view() {
             Some((z_case.clone(), s_case.clone()))
         } else {
             None
         }
     }
-
-    
 }
