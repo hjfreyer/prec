@@ -1,5 +1,5 @@
-use crate::base::{SyntaxEq, TypedPoint};
-use itertools::Itertools;
+use crate::base;
+use crate::base::SyntaxEq;
 use std::fmt;
 use std::rc::Rc;
 
@@ -170,6 +170,63 @@ impl Func {
         Func(view, tag)
     }
 
+    // Eliminators.
+    pub fn unz(&self) -> Option<()> {
+        if let View::Z = self.view() {
+            Some(())
+        } else {
+            None
+        }
+    }
+
+    pub fn uns(&self) -> Option<()> {
+        if let View::S = self.view() {
+            Some(())
+        } else {
+            None
+        }
+    }
+
+    pub fn unproj(&self) -> Option<(u32, u32)> {
+        if let View::Proj(select, arity) = self.view() {
+            Some((select, arity))
+        } else {
+            None
+        }
+    }
+
+    pub fn unempty(&self) -> Option<u32> {
+        if let View::Empty(arity) = self.view() {
+            Some(arity)
+        } else {
+            None
+        }
+    }
+
+    pub fn decompose(&self) -> Option<(Func, Func)> {
+        if let View::Comp(f, g) = self.view() {
+            Some((f.clone(), g.clone()))
+        } else {
+            None
+        }
+    }
+
+    pub fn unstack(&self) -> Option<(Func, Func)> {
+        if let View::Stack(car, cdr) = self.view() {
+            Some((car.clone(), cdr.clone()))
+        } else {
+            None
+        }
+    }
+
+    pub fn unrec(&self) -> Option<(Func, Func)> {
+        if let View::Rec(z_case, s_case) = self.view() {
+            Some((z_case.clone(), s_case.clone()))
+        } else {
+            None
+        }
+    }
+
     // Instance methods.
     pub fn view(&self) -> View {
         (*self.0).clone()
@@ -230,7 +287,7 @@ impl Func {
             return Some((0, None));
         }
         if let View::Comp(f, g) = self.view() {
-            if let (View::S, View::Stack(car, cdr)) = (f.view(), g.view()) {
+            if let (View::S, View::Stack(car, _)) = (f.view(), g.view()) {
                 return car.as_int().map(|(value, arity)| (value + 1, arity));
             }
         }
@@ -277,6 +334,8 @@ struct StackHelper {
     args: Vec<Func>,
     arity_in: u32,
 }
+
+impl base::Point for Func {}
 
 impl SyntaxEq for Func {
     fn syntax_eq(&self, other: &Self) -> bool {
