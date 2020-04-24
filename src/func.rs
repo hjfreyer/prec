@@ -171,27 +171,27 @@ impl Func {
     }
 
     // Instance methods.
-    pub fn view(&self) -> &View {
-        &*self.0
+    pub fn view(&self) -> View {
+        (*self.0).clone()
     }
 
     pub fn into_view(self) -> View {
         (*self.0).clone()
     }
 
-    pub fn tag(&self) -> &Tag {
-        &self.1
+    pub fn tag(&self) -> Tag {
+        self.1
     }
 
     pub fn arity(&self) -> Arity {
         match self.view() {
             View::Z => Arity { out: 1, r#in: 0 },
             View::S => Arity { out: 1, r#in: 1 },
-            &View::Proj(_, arity) => Arity {
+            View::Proj(_, arity) => Arity {
                 out: 1,
                 r#in: arity,
             },
-            &View::Empty(arity) => Arity {
+            View::Empty(arity) => Arity {
                 out: 0,
                 r#in: arity,
             },
@@ -215,7 +215,7 @@ impl Func {
 
     fn as_const(&self) -> Option<(Func, u32)> {
         if let View::Comp(f, g) = self.view() {
-            if let &View::Empty(arity) = g.view() {
+            if let View::Empty(arity) = g.view() {
                 return Some((f.clone(), arity));
             }
         }
@@ -242,10 +242,10 @@ impl Func {
             match func.view() {
                 View::Empty(arity) => StackHelper {
                     args: vec![],
-                    arity_in: *arity,
+                    arity_in: arity,
                 },
                 View::Stack(car, cdr) => {
-                    let mut cdr_vec = stack_to_backwards_vec(&*cdr);
+                    let mut cdr_vec = stack_to_backwards_vec(&cdr);
                     cdr_vec.args.push(car.clone());
                     cdr_vec
                 }
@@ -257,8 +257,8 @@ impl Func {
         }
 
         if let View::Comp(f, g) = self.view() {
-            let f_res = stack_to_backwards_vec(f);
-            let g_res = stack_to_backwards_vec(g);
+            let f_res = stack_to_backwards_vec(&f);
+            let g_res = stack_to_backwards_vec(&g);
             return Some((
                 StackHelper {
                     args: f_res.args.into_iter().rev().collect(),
@@ -292,14 +292,16 @@ impl SyntaxEq for Func {
             (View::Empty(s_arity), View::Empty(o_arity)) => s_arity == o_arity,
             (View::Empty(_), _) => false,
             (View::Stack(s_car, s_cdr), View::Stack(o_car, o_cdr)) => {
-                s_car.syntax_eq(o_car) && s_cdr.syntax_eq(o_cdr)
+                s_car.syntax_eq(&o_car) && s_cdr.syntax_eq(&o_cdr)
             }
             (View::Stack(_, _), _) => false,
             (View::Comp(s_f, s_g), View::Comp(o_f, o_g)) => {
-                s_f.syntax_eq(o_f) && s_g.syntax_eq(o_g)
+                s_f.syntax_eq(&o_f) && s_g.syntax_eq(&o_g)
             }
             (View::Comp(_, _), _) => false,
-            (View::Rec(s_f, s_g), View::Rec(o_f, o_g)) => s_f.syntax_eq(o_f) && s_g.syntax_eq(o_g),
+            (View::Rec(s_f, s_g), View::Rec(o_f, o_g)) => {
+                s_f.syntax_eq(&o_f) && s_g.syntax_eq(&o_g)
+            }
             (View::Rec(_, _), _) => false,
         }
     }
@@ -367,30 +369,30 @@ impl fmt::Debug for Func {
             match func.view() {
                 View::Z => fmt.write_str("Z"),
                 View::S => fmt.write_str("S"),
-                &View::Proj(select, arity) => {
+                View::Proj(select, arity) => {
                     fmt.write_fmt(format_args!("(proj {} {})", select, arity))
                 }
 
-                &View::Empty(arity) => fmt.write_fmt(format_args!("(empty {})", arity)),
+                View::Empty(arity) => fmt.write_fmt(format_args!("(empty {})", arity)),
                 View::Stack(car, cdr) => {
                     fmt.write_str("(stack ")?;
-                    write(car, fmt)?;
+                    write(&car, fmt)?;
                     fmt.write_str(" ")?;
-                    write(cdr, fmt)?;
+                    write(&cdr, fmt)?;
                     fmt.write_str(")")
                 }
                 View::Comp(f, g) => {
                     fmt.write_str("(comp ")?;
-                    write(f, fmt)?;
+                    write(&f, fmt)?;
                     fmt.write_str(" ")?;
-                    write(g, fmt)?;
+                    write(&g, fmt)?;
                     fmt.write_str(")")
                 }
                 View::Rec(z_case, s_case) => {
                     fmt.write_str("(rec ")?;
-                    write(z_case, fmt)?;
+                    write(&z_case, fmt)?;
                     fmt.write_str(" ")?;
-                    write(s_case, fmt)?;
+                    write(&s_case, fmt)?;
                     fmt.write_str(")")
                 }
             }

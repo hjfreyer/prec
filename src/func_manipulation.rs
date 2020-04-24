@@ -55,16 +55,16 @@ pub fn substitute(
     match in_func.view() {
         FView::Z | FView::S | FView::Proj(_, _) | FView::Empty(_) => Ok(in_func.clone()),
         FView::Stack(car, cdr) => Func::stack(
-            substitute(car, match_func, replacement)?,
-            substitute(cdr, match_func, replacement)?,
+            substitute(&car, match_func, replacement)?,
+            substitute(&cdr, match_func, replacement)?,
         ),
         FView::Comp(f, g) => Func::comp(
-            substitute(f, match_func, replacement)?,
-            substitute(g, match_func, replacement)?,
+            substitute(&f, match_func, replacement)?,
+            substitute(&g, match_func, replacement)?,
         ),
         FView::Rec(z_case, s_case) => Func::stack(
-            substitute(z_case, match_func, replacement)?,
-            substitute(s_case, match_func, replacement)?,
+            substitute(&z_case, match_func, replacement)?,
+            substitute(&s_case, match_func, replacement)?,
         ),
     }
 }

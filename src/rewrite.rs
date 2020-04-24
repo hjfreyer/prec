@@ -241,7 +241,7 @@ pub enum Rule {
 impl Rule {
     pub fn match_start(self, func: &Func) -> Option<Rewrite> {
         let view = self.match_start_view(func.clone());
-        view.map(|view| Rewrite::new(view, *func.tag()))
+        view.map(|view| Rewrite::new(view, func.tag()))
     }
 
     fn match_start_view(self, func: Func) -> Option<View> {
@@ -383,7 +383,7 @@ impl Rule {
                     let eta_red = Rewrite::new(View::EtaReductionRight(Func::z()), func::Tag::None);
                     let eta_abs = Rewrite::new(View::Reverse(eta_red), func::Tag::None);
 
-                    let g_rw = Rewrite::new(View::StackCar(eta_abs, g_cdr), *g.tag());
+                    let g_rw = Rewrite::new(View::StackCar(eta_abs, g_cdr), g.tag());
 
                     Some(View::CompRight(f, g_rw))
                 } else {
@@ -398,7 +398,7 @@ impl Rule {
                     let eta_red = Rewrite::new(View::EtaReductionRight(Func::s()), func::Tag::None);
                     let eta_abs = Rewrite::new(View::Reverse(eta_red), func::Tag::None);
 
-                    let g_rw = Rewrite::new(View::StackCar(eta_abs, g_cdr), *g.tag());
+                    let g_rw = Rewrite::new(View::StackCar(eta_abs, g_cdr), g.tag());
 
                     Some(View::CompRight(f, g_rw))
                 } else {
@@ -686,11 +686,11 @@ pub fn reduce_once(func: &Func) -> Option<Rewrite> {
     if let FView::Comp(f, g) = func.view() {
         let opt = None
             .or_else(|| {
-                reduce_once(f)
+                reduce_once(&f)
                     .map(|rw| Rewrite::new(View::CompLeft(rw, g.clone()), func.tag().clone()))
             })
             .or_else(|| {
-                reduce_once(g)
+                reduce_once(&g)
                     .map(|rw| Rewrite::new(View::CompRight(f.clone(), rw), func.tag().clone()))
             });
         if let Some(p) = opt {
@@ -700,11 +700,11 @@ pub fn reduce_once(func: &Func) -> Option<Rewrite> {
     if let FView::Stack(car, cdr) = func.view() {
         let opt = None
             .or_else(|| {
-                reduce_once(car)
+                reduce_once(&car)
                     .map(|rw| Rewrite::new(View::StackCar(rw, cdr.clone()), func.tag().clone()))
             })
             .or_else(|| {
-                reduce_once(cdr)
+                reduce_once(&cdr)
                     .map(|rw| Rewrite::new(View::StackCdr(car.clone(), rw), func.tag().clone()))
             });
         if let Some(p) = opt {
