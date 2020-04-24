@@ -1,14 +1,12 @@
-
 use crate::base;
 use crate::base::{ActionChain, Tactic};
 use crate::func;
 use func::Func;
 //use im::vector::Vector;
 
-use crate::actions::func::Action as FAction;
-use crate::actions::path::{Action as PAction, Path};
-use crate::actions::stack::{Action as SAction, Stack};
-use crate::actions::stack;
+use crate::path::Path;
+use crate::stack::actions::Action as SAction;
+use crate::stack::Stack;
 
 pub struct Plus<A: base::Action, T: base::Tactic<A>>(T, std::marker::PhantomData<A>);
 
@@ -22,34 +20,6 @@ impl<A: base::Action, T: base::Tactic<A>> Tactic<A> for Plus<A, T> {
         }
         Some(res)
     }
-}
-
-fn apply_cut(mid: &Func, stack: &Stack) -> Option<ActionChain<SAction>> {
-    let (Path { start, end }, cdr) = stack.clone().snoc()?;
-    let new_stack = cdr
-        .push(Path {
-            start: mid.clone(),
-            end,
-        })
-        .push(Path {
-            start,
-            end: mid.clone(),
-        });
-    Some(ActionChain {
-        start: new_stack,
-        actions: im::vector![SAction::HorizontalConcat],
-    })
-}
-
-pub fn cut(func: &Func) -> impl Tactic<SAction> {
-    struct Impl(Func);
-    impl Tactic<SAction> for Impl {
-        fn react(&self, stack: &Stack) -> Option<ActionChain<SAction>> {
-            let Self(mid) = self;
-            apply_cut(mid, stack)
-        }
-    }
-    Impl(func.clone())
 }
 
 // use crate::func;
@@ -227,41 +197,41 @@ pub fn cut(func: &Func) -> impl Tactic<SAction> {
 //     CarTactic(t)
 // }
 
-struct Pipe<A : base::Action, T1: Tactic<A>, T2: Tactic<A>>(T1, T2, std::marker::PhantomData<A>);
-impl<A : base::Action, T1: Tactic<A>, T2: Tactic<A>> Tactic<A> for Pipe<A, T1, T2> {
+struct Pipe<A: base::Action, T1: Tactic<A>, T2: Tactic<A>>(T1, T2, std::marker::PhantomData<A>);
+impl<A: base::Action, T1: Tactic<A>, T2: Tactic<A>> Tactic<A> for Pipe<A, T1, T2> {
     fn react(&self, point: &A::Point) -> Option<ActionChain<A>> {
         let Self(t1, t2, _) = self;
         let chain1 = t1.react(&point)?;
         let mut chain2 = t2.react(&chain1.start)?;
         chain2.actions.append(chain1.actions);
-Some(chain2)
+        Some(chain2)
     }
 }
 
-pub fn induction() -> impl Tactic {
-    struct Cut();
-    impl Tactic for Cut {
-        fn apply(&self, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
-            let Endpoints(f, rec) = stack.head()?;
-            let (z_case, s_case) = rec.unrec()?;
-            let f_arity = f.arity().r#in;
-            let mid = Func::rec(Func::comp(f, Func::z_eye(f_arity)).unwrap(), s_case).unwrap();
-            apply_cut(&mid, stack)
-        }
-    }
-    Pipe(
-        Cut(),
-        Pipe(path::induction(), stack::cdr(path::rec_z())),
-    )
+// pub fn induction() -> impl Tactic {
+//     struct Cut();
+//     impl Tactic for Cut {
+//         fn apply(&self, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
+//             let Endpoints(f, rec) = stack.head()?;
+//             let (z_case, s_case) = rec.unrec()?;
+//             let f_arity = f.arity().r#in;
+//             let mid = Func::rec(Func::comp(f, Func::z_eye(f_arity)).unwrap(), s_case).unwrap();
+//             apply_cut(&mid, stack)
+//         }
+//     }
+//     Pipe(
+//         Cut(),
+//         Pipe(path::induction(), stack::cdr(path::rec_z())),
+//     )
 
-    // struct Impl();
-    // impl Tactic for Impl {
-    //     fn apply(&self, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
+//     // struct Impl();
+//     // impl Tactic for Impl {
+//     //     fn apply(&self, stack: &Stack) -> Option<(Stack, Vector<StackAction>)> {
 
-    //     }
-    // }
-    // Impl();
-}
+//     //     }
+//     // }
+//     // Impl();
+// }
 
 // struct TryTactic<T: Tactic>(T);
 // impl<T: Tactic> Tactic for TryTactic<T> {

@@ -1,6 +1,7 @@
 use crate::base;
-use crate::func::Func;
 use base::Action as _;
+
+use super::*;
 
 #[derive(Debug)]
 pub enum Error {
@@ -96,15 +97,5 @@ impl base::Action for Action {
         } else {
             Err(Error::NotApplicable(self.clone(), func))
         }
-    }
-}
-
-impl base::Tactic<Action> for Action {
-    fn react(&self, func: &Func) -> Option<base::ActionChain<Action>> {
-        let rewritten = self.act(func.clone()).ok()?;
-        Some(base::ActionChain {
-            start: rewritten,
-            actions: im::vector![Action::Inverse(func.clone(), Box::new(self.clone()))],
-        })
     }
 }

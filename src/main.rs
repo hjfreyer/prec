@@ -1,7 +1,8 @@
 // #[macro_use]
-pub mod actions;
 pub mod base;
 pub mod func;
+pub mod path;
+pub mod stack;
 // mod func_manipulation;
 // mod metapath;
 // mod path;
@@ -15,9 +16,8 @@ pub mod tactics;
 // use im;
 // use im::vector::Vector;
 // use tactics::Tactic;
-use actions::func as fa;
-use actions::stack::Stack;
 use base::Tactic;
+use stack::Stack;
 // fn advance<M: tactics::Tactic>(g: tactics::Stack, m: M) -> tactics::Stack {
 //     let g = m.apply(&g).unwrap().0;
 //     println!("{:?}", g);
@@ -54,7 +54,7 @@ fn main() {
     macro_rules! solve {
             ($a:expr, $b: expr; $($tactic:expr;)*) => {
                 {
-                    let mut stack = Stack::Empty.push(actions::path::Path{start: $a, end: $b});
+                    let mut stack = Stack::Empty.push(path::Path{start: $a, end: $b});
 //                    let mut actions : im::Vector<tactics::StackAction>= im::Vector::new();
                     println!("{:?}", stack);
                     $(
@@ -73,17 +73,17 @@ fn main() {
     // Proof that ed = 1
 
     let stack = solve!(
-        func![(is_even _double)], func![(const 1 (int 1))];
-        tactics::cut(&func![(rec (int 1) ((not not) (proj 0 2)))]);
-        // fa::Action::
-        tactics::induction();
-        // tactics::auto();
-        // tactics::auto();
-        // path::reverse();
-        // tactics::induction();
-        // tactics::auto();
-        // tactics::auto();
-    );
+            func![(is_even _double)], func![(const 1 (int 1))];
+            stack::tactics::cut(&func![(rec (int 1) ((not not) (proj 0 2)))]);
+            // fa::Action::
+    //        tactics::induction();
+            // tactics::auto();
+            // tactics::auto();
+            // path::reverse();
+            // tactics::induction();
+            // tactics::auto();
+            // tactics::auto();
+        );
 
     //     // Proof that (half double) = id
     //     //

@@ -1,3 +1,6 @@
+pub mod actions;
+pub mod tactics;
+
 use crate::base;
 use crate::base::SyntaxEq;
 use std::fmt;
