@@ -335,6 +335,10 @@ impl fmt::Debug for Func {
                         return fmt.write_str(")");
                     }
 
+                    if fs.args.len() == 0 {
+                        return fmt.write_fmt(format_args!("(!{} * ...)", fs.arity_in));
+                    }
+
                     fn write_stack(sh: &StackHelper, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
                         if sh.args.len() == 0 {
                             return fmt.write_fmt(format_args!("!{}", sh.arity_in));

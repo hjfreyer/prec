@@ -78,13 +78,14 @@ pub fn induction() -> impl Tactic {
 
 impl<RW: rewrite::Tactic> Tactic for RW {
     fn apply(&self, end_path: &Endpoints<Func>) -> Option<(Endpoints<Func>, Vector<Action>)> {
-        let (rewritten, rewrites) = self.apply(end_path.end())?;
+        let rewrites = self.apply(end_path.end())?;
+        let new_endpoint = rewrites.last().unwrap().endpoints().end().clone();
         let wrapped_rewrites = rewrites
             .into_iter()
             .map(|rw| Action(View::Extend(rw)))
             .collect();
         Some((
-            Endpoints(end_path.start().clone(), rewritten),
+            Endpoints(end_path.start().clone(), new_endpoint),
             wrapped_rewrites,
         ))
     }

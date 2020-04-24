@@ -75,10 +75,9 @@ impl fmt::Debug for Stack {
                 fmt.write_str("  ")?
             }
             if fmt.alternate() {
-           fmt.write_fmt(format_args!("{:#?} -> {:#?}", head.start(), head.end())) 
+                fmt.write_fmt(format_args!("{:#?} -> {:#?}", head.start(), head.end()))
             } else {
-                           fmt.write_fmt(format_args!("{:?} -> {:?}", head.start(), head.end()))
-
+                fmt.write_fmt(format_args!("{:?} -> {:?}", head.start(), head.end()))
             }
         } else {
             fmt.write_str("EMPTY")

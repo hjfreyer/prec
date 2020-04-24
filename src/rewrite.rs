@@ -222,6 +222,7 @@ pub enum Rule {
 
     // Composition.
     CompAssoc,
+    CompAssocLeft,
     CompDistributeEmpty,
     CompDistributeStack,
 
@@ -276,6 +277,14 @@ impl Rule {
                     }
                 }
                 None
+            }
+            Rule::CompAssocLeft => {
+                let (f, gh) = func.decompose()?;
+                let (g, h) = gh.decompose()?;
+                return Some(View::Reverse(Rewrite::new(
+                    View::CompAssoc(f, g, h),
+                    func::Tag::None,
+                )));
             }
             Rule::CompDistributeEmpty => {
                 if let FView::Comp(stack, g) = func.into_view() {
@@ -365,8 +374,8 @@ impl Rule {
                     }
                 }
                 None
-            },
-            Rule::    EtaAbstractBareZ => {
+            }
+            Rule::EtaAbstractBareZ => {
                 let (f, g) = func.decompose()?;
                 f.unrec()?;
                 let (g_car, g_cdr) = g.unstack()?;
@@ -381,7 +390,7 @@ impl Rule {
                     None
                 }
             }
-            Rule::    EtaAbstractBareS => {
+            Rule::EtaAbstractBareS => {
                 let (f, g) = func.decompose()?;
                 f.unrec()?;
                 let (g_car, g_cdr) = g.unstack()?;
@@ -402,19 +411,172 @@ impl Rule {
 
 pub trait Tactic {
     // Note: tactics use opposite conventions for "start" and "end".
-    fn apply(&self, end_func: &Func) -> Option<(Func, Vector<Rewrite>)>;
+    fn apply(&self, end_func: &Func) -> Option<Vector<Rewrite>>;
+}
+
+struct RecursiveTactic<T: Tactic>(T);
+impl<T: Tactic> Tactic for RecursiveTactic<T> {
+    fn apply(&self, end_func: &Func) -> Option<Vector<Rewrite>> {
+        let Self(tactic) = self;
+        if let res @ Some(_) = tactic.apply(end_func) {
+            return res;
+        }
+
+        if let Some((f, g)) = end_func.decompose() {
+            let opt = None
+                .or_else(|| {
+                    let rws = self.apply(&f)?;
+                    Some(
+                        rws.into_iter()
+                            .map(|rw| Rewrite::new(View::CompLeft(rw, g.clone()), func::Tag::None))
+                            .collect(),
+                    )
+                })
+                .or_else(|| {
+                    let rws = self.apply(&g)?;
+                    Some(
+                        rws.into_iter()
+                            .map(|rw| Rewrite::new(View::CompRight(f.clone(), rw), func::Tag::None))
+                            .collect(),
+                    )
+                });
+            if let Some(p) = opt {
+                return Some(p);
+            }
+        }
+
+        if let Some((car, cdr)) = end_func.unstack() {
+            let opt = None
+                .or_else(|| {
+                    let rws = self.apply(&car)?;
+                    Some(
+                        rws.into_iter()
+                            .map(|rw| {
+                                Rewrite::new(View::StackCar(rw, cdr.clone()), func::Tag::None)
+                            })
+                            .collect(),
+                    )
+                })
+                .or_else(|| {
+                    let rws = self.apply(&cdr)?;
+                    Some(
+                        rws.into_iter()
+                            .map(|rw| {
+                                Rewrite::new(View::StackCdr(car.clone(), rw), func::Tag::None)
+                            })
+                            .collect(),
+                    )
+                });
+            if let Some(p) = opt {
+                return Some(p);
+            }
+        }
+        None
+    }
+}
+
+struct RepeatTactic<T: Tactic>(T);
+impl<T: Tactic> Tactic for RepeatTactic<T> {
+    fn apply(&self, end_func: &Func) -> Option<Vector<Rewrite>> {
+        let Self(tactic) = self;
+        let mut res = im::vector![];
+
+        let mut f = end_func.clone();
+        while let Some(rws) = tactic.apply(&f) {
+            f = rws.last().unwrap().endpoints().end().clone();
+            res.extend(rws);
+        }
+
+        if res.is_empty() {
+            None
+        } else {
+            Some(res)
+        }
+    }
+}
+
+struct OrTactic<T1: Tactic, T2: Tactic>(T1, T2);
+impl<T1: Tactic, T2: Tactic> Tactic for OrTactic<T1, T2> {
+    fn apply(&self, end_func: &Func) -> Option<Vector<Rewrite>> {
+        let Self(t1, t2) = self;
+
+        if let res @ Some(_) = t1.apply(end_func) {
+            res
+        } else {
+            t2.apply(end_func)
+        }
+    }
+}
+
+pub fn distribute_fully() -> impl Tactic {
+    RepeatTactic(RecursiveTactic(Rule::CompAssoc))
+}
+
+pub fn reduce2() -> impl Tactic {
+    RepeatTactic(OrTactic(
+        RecursiveTactic(Rule::CompAssoc),
+        OrTactic(
+            RecursiveTactic(Rule::CompDistributeEmpty),
+            OrTactic(
+                RecursiveTactic(Rule::ProjCar),
+                OrTactic(
+                    RecursiveTactic(Rule::ProjCdr),
+                    OrTactic(
+                        RecursiveTactic(Rule::CompDistributeStack),
+                        OrTactic(
+                            RecursiveTactic(Rule::RecElimZ),
+                            RecursiveTactic(Rule::RecElimS),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    ))
+}
+//  EtaReductionLeft,
+//         EtaReductionRight,
+//         CompDistributeEmpty,
+//         CompAssoc,
+//         ProjCar,
+//         ProjCdr,
+//         ProjCar,
+//         ProjCdr,
+//         CompDistributeStack,
+//         RecElimZ,
+//         RecElimS,
+//         EtaAbstractBareZ,
+//         EtaAbstractBareS
+
+impl Tactic for Rule {
+    fn apply(&self, end_func: &Func) -> Option<Vector<Rewrite>> {
+        let rw = self.match_start(end_func)?;
+        Some(im::vector![rw])
+    }
 }
 
 pub fn reduce_fully_tactic() -> impl Tactic {
     struct Impl();
     impl Tactic for Impl {
-        fn apply(&self, end_func: &Func) -> Option<(Func, Vector<Rewrite>)> {
+        fn apply(&self, end_func: &Func) -> Option<Vector<Rewrite>> {
             let reduced = reduce_fully(end_func);
-            let last = reduced.last()?;
-            Some((last.endpoints().end().clone(), reduced))
+            reduced.last()?;
+            Some(reduced)
         }
     }
     Impl()
+}
+
+pub fn reduce_n_times(n: usize) -> impl Tactic {
+    struct Impl(usize);
+    impl Tactic for Impl {
+        fn apply(&self, end_func: &Func) -> Option<Vector<Rewrite>> {
+            let Self(n) = self;
+            let reduced = reduce_fully(end_func).slice(0..*n);
+            reduced.last()?;
+            Some(reduced)
+        }
+    }
+    Impl(n)
 }
 
 // pub fn add_free_variable(func: &Func) -> Func {
@@ -503,19 +665,19 @@ pub fn reduce_once(func: &Func) -> Option<Rewrite> {
     }
 
     let rw_reduction = try_rules!(
+        EtaReductionLeft,
+        EtaReductionRight,
+        CompDistributeEmpty,
+        CompAssoc,
         ProjCar,
         ProjCdr,
         ProjCar,
         ProjCdr,
+        CompDistributeStack,
         RecElimZ,
         RecElimS,
         EtaAbstractBareZ,
-        EtaAbstractBareS,
-        EtaReductionLeft,
-        EtaReductionRight,
-        CompAssoc,
-        CompDistributeEmpty,
-        CompDistributeStack
+        EtaAbstractBareS
     );
     if let Some(rw) = rw_reduction {
         return Some(rw);
@@ -561,13 +723,12 @@ pub fn reduce_fully(func: &Func) -> Vector<Rewrite> {
     while let Some(rw) = reduce_once(&func) {
         func = rw.endpoints().end().clone();
         res.push_back(rw);
-           }
+    }
     res
 }
 
-
-// (comp (rec Z (comp (comp (rec (proj 0 1) (comp S (stack (proj 2 3) (empty 3)))) (stack (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (comp (rec (comp S (stack Z (empty 0))) (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (proj 0 2) (empty 2)))) (stack (proj 0 2) (empty 2))) (empty 2))) (stack (proj 1 2) (empty 2)))) (stack (proj 1 2) (stack (proj 0 2) (empty 2))))) 
-// (stack (comp 
-//     (rec Z (comp S (stack (comp S (stack (proj 0 2) (empty 2))) (empty 2)))) 
-//        (stack Z (empty 0))) 
+// (comp (rec Z (comp (comp (rec (proj 0 1) (comp S (stack (proj 2 3) (empty 3)))) (stack (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (comp (rec (comp S (stack Z (empty 0))) (comp (rec (comp S (stack Z (empty 0))) (comp Z (empty 2))) (stack (proj 0 2) (empty 2)))) (stack (proj 0 2) (empty 2))) (empty 2))) (stack (proj 1 2) (empty 2)))) (stack (proj 1 2) (stack (proj 0 2) (empty 2)))))
+// (stack (comp
+//     (rec Z (comp S (stack (comp S (stack (proj 0 2) (empty 2))) (empty 2))))
+//        (stack Z (empty 0)))
 //     (empty 0)))
