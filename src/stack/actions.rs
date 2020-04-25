@@ -3,7 +3,6 @@ use crate::func::Func;
 use crate::path;
 use base::{Action as _, SyntaxEq};
 use path::actions as pa;
-use std::fmt;
 
 use super::*;
 

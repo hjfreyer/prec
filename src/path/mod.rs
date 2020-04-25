@@ -126,28 +126,6 @@ impl base::SyntaxEq for Path {
 //     Impl()
 // }
 
-// pub fn rec_z() -> impl Tactic {
-//     struct Impl();
-//     impl Tactic for Impl {
-//         fn apply(
-//             &self,
-//             Endpoints(start, end): &Endpoints<Func>,
-//         ) -> Option<(Endpoints<Func>, Vector<Action>)> {
-//             let (start_z, start_s) = start.unrec()?;
-//             let (end_z, end_s) = end.unrec()?;
-//             if start_s.syntax_eq(&end_s) {
-//                 Some((
-//                     Endpoints(start_z, end_z),
-//                     im::vector![Action(View::RecZ(start_s))],
-//                 ))
-//             } else {
-//                 None
-//             }
-//         }
-//     }
-//     Impl()
-// }
-
 // // #[derive(Clone, Debug)]
 // // pub enum BadPath {
 // //     IncompatibleArity(Func, Func),

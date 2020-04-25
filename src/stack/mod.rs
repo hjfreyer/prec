@@ -25,6 +25,13 @@ impl Stack {
             Stack::Cons(car, cdr) => Some((car, *cdr)),
         }
     }
+
+    pub fn head(&self) -> Option<path::Path> {
+        match self {
+            Stack::Empty => None,
+            Stack::Cons(car, _) => Some(car.clone()),
+        }
+    }
 }
 
 impl base::Point for Stack {}

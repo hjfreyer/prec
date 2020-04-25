@@ -414,67 +414,6 @@ pub trait Tactic {
     fn apply(&self, end_func: &Func) -> Option<Vector<Rewrite>>;
 }
 
-struct RecursiveTactic<T: Tactic>(T);
-impl<T: Tactic> Tactic for RecursiveTactic<T> {
-    fn apply(&self, end_func: &Func) -> Option<Vector<Rewrite>> {
-        let Self(tactic) = self;
-        if let res @ Some(_) = tactic.apply(end_func) {
-            return res;
-        }
-
-        if let Some((f, g)) = end_func.decompose() {
-            let opt = None
-                .or_else(|| {
-                    let rws = self.apply(&f)?;
-                    Some(
-                        rws.into_iter()
-                            .map(|rw| Rewrite::new(View::CompLeft(rw, g.clone()), func::Tag::None))
-                            .collect(),
-                    )
-                })
-                .or_else(|| {
-                    let rws = self.apply(&g)?;
-                    Some(
-                        rws.into_iter()
-                            .map(|rw| Rewrite::new(View::CompRight(f.clone(), rw), func::Tag::None))
-                            .collect(),
-                    )
-                });
-            if let Some(p) = opt {
-                return Some(p);
-            }
-        }
-
-        if let Some((car, cdr)) = end_func.unstack() {
-            let opt = None
-                .or_else(|| {
-                    let rws = self.apply(&car)?;
-                    Some(
-                        rws.into_iter()
-                            .map(|rw| {
-                                Rewrite::new(View::StackCar(rw, cdr.clone()), func::Tag::None)
-                            })
-                            .collect(),
-                    )
-                })
-                .or_else(|| {
-                    let rws = self.apply(&cdr)?;
-                    Some(
-                        rws.into_iter()
-                            .map(|rw| {
-                                Rewrite::new(View::StackCdr(car.clone(), rw), func::Tag::None)
-                            })
-                            .collect(),
-                    )
-                });
-            if let Some(p) = opt {
-                return Some(p);
-            }
-        }
-        None
-    }
-}
-
 struct RepeatTactic<T: Tactic>(T);
 impl<T: Tactic> Tactic for RepeatTactic<T> {
     fn apply(&self, end_func: &Func) -> Option<Vector<Rewrite>> {
