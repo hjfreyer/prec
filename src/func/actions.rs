@@ -138,7 +138,7 @@ impl Action {
                 let (f, g) = func.decompose()?;
                 let g2 = g_action.act(g).ok()?;
                 Some(Func::comp(f, g2).unwrap())
-            }             
+            }
             Action::StackCar(action) => {
                 let (car, cdr) = func.unstack()?;
                 let car2 = action.act(car).ok()?;
@@ -155,10 +155,9 @@ impl Action {
             Action::RecS(action) => {
                 let (z_case, s_case) = func.unrec()?;
                 Some(Func::rec(z_case, action.internal_apply(&s_case)?).unwrap())
-            }            
+            }
             Action::Inverse(f, action) => {
-                if func.syntax_eq(&action.internal_apply(f).unwrap()) 
-                {
+                if func.syntax_eq(&action.internal_apply(f).unwrap()) {
                     Some(f.clone())
                 } else {
                     None

@@ -60,18 +60,17 @@ pub fn reduce_once() -> impl base::Tactic<Action> {
     // }
     // Impl();
 
-    tactic![(||
-        (RecursiveTactic(Action::ProjCar))
-        (RecursiveTactic(Action::ProjCdr))
-        (RecursiveTactic(Action::CompAssocRight))
-        (RecursiveTactic(Action::CompDistributeStack))
-        (RecursiveTactic(Action::CompDistributeEmpty))
-        (RecursiveTactic(Action::RecElimZ))
-        (RecursiveTactic(Action::RecElimS))
-        (RecursiveTactic(Action::EtaReductionLeft))
-        (RecursiveTactic(Action::EtaReductionRight))
-        (RecursiveTactic(eta_abstract_bare_z_or_s()))
-    )]
+    tactic![
+        (|| (RecursiveTactic(Action::ProjCar))(RecursiveTactic(Action::ProjCdr))(RecursiveTactic(
+            Action::CompAssocRight
+        ))(RecursiveTactic(Action::CompDistributeStack))(RecursiveTactic(
+            Action::CompDistributeEmpty
+        ))(RecursiveTactic(Action::RecElimZ))(RecursiveTactic(Action::RecElimS))(
+            RecursiveTactic(Action::EtaReductionLeft)
+        )(RecursiveTactic(Action::EtaReductionRight))(RecursiveTactic(
+            eta_abstract_bare_z_or_s()
+        )))
+    ]
     // star(tactics::pipe(
     //     tactics::star(RecursiveTactic(Action::CompAssocRight)),
     //     tactics::star(RecursiveTactic(Action::CompDistributeStack)),

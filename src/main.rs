@@ -78,7 +78,7 @@ fn main() {
     //     stack::tactics::induction();
     //     stack::tactics::auto();
     //     stack::tactics::auto();
-    //     stack::tactics::car(path::tactics::reverse());   
+    //     stack::tactics::car(path::tactics::reverse());
     //     stack::tactics::induction();
     //     stack::tactics::auto();
     //     stack::tactics::auto();
@@ -90,20 +90,22 @@ fn main() {
             (proj 0 2)
             (proj 1 2))) (not (is_even (_double (proj 0 1)))) (_half _double))
     ];
+    let factored2 = func![((S
+            (proj 1 2)) (not (is_even (_double (proj 0 1)))) (_half _double))
+    ];
 
     let _stack = solve!(
         func![(_half _double)], func![(proj 0 1)];
         stack::tactics::cut(&func![(rec (int 0) (S (proj 0 2)))]);
         stack::tactics::induction();
-        stack::tactics::car(path::tactics::simplify()); 
-        // stack::tactics::cut(&factored);
+        //stack::tactics::car(path::tactics::simplify());
         // stack::tactics::auto();
-        // stack::tactics::car(path::tactics::comp_left()); 
-
-        // stack::tactics::car(path::tactics::reverse());   
-        // stack::tactics::induction();
-        // stack::tactics::auto();
-        // stack::tactics::auto();
+        stack::tactics::cut(&factored2);
+        stack::tactics::cut(&factored);
+        stack::tactics::turbo();
+        stack::tactics::car(path::tactics::comp_left());
+        stack::tactics::cut(&func![(rec (S (proj 0 1)) (S (proj 2 3)))]);
+        stack::tactics::turbo();
     );
     //     // Proof that (half double) = id
     //     //

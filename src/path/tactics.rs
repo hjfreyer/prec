@@ -51,7 +51,7 @@ pub fn on_end<T: base::Tactic<fa::Action>>(tactic: T) -> impl base::Tactic<Actio
 }
 
 pub fn simplify() -> impl base::Tactic<Action> {
-    tactic![(*(|| (on_start(ft::reduce_once())) (on_end(ft::reduce_once()))))]
+    tactic![(*(|| (on_start(ft::reduce_once()))(on_end(ft::reduce_once()))))]
 }
 
 pub fn induction() -> impl base::Tactic<Action> {
@@ -88,8 +88,11 @@ pub fn reverse() -> impl base::Tactic<Action> {
     struct Impl();
     impl base::Tactic<Action> for Impl {
         fn react(&self, Path { start, end }: &Path) -> Option<base::ActionChain<Action>> {
-            Some (base::ActionChain{
-                start: Path{start: end.clone(), end: start.clone()},
+            Some(base::ActionChain {
+                start: Path {
+                    start: end.clone(),
+                    end: start.clone(),
+                },
                 actions: im::vector![Action::Reverse],
             })
         }

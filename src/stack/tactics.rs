@@ -26,9 +26,12 @@ pub fn refl() -> impl base::Tactic<Action> {
 }
 
 pub fn auto() -> impl base::Tactic<Action> {
-    crate::tactic![
-        (&& (car(path::tactics::simplify())) (refl()))
-    ]
+    crate::tactic![(&&(car(path::tactics::simplify()))(refl()))]
+}
+
+pub fn turbo() -> impl base::Tactic<Action> {
+    let side_a = || crate::tactic![(*(|| (auto())(induction())))];
+    crate::tactic![(*(|| (side_a())(&&(car(path::tactics::reverse()))(side_a()))))]
 }
 
 pub fn car<PT: base::Tactic<pa::Action>>(tactic: PT) -> impl base::Tactic<Action> {

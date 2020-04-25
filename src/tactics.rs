@@ -56,35 +56,38 @@ where
 
 pub fn pipe<A: base::Action, T1: Tactic<A>, T2: Tactic<A>>(t1: T1, t2: T2) -> impl Tactic<A> {
     struct Pipe<A: base::Action, T1: Tactic<A>, T2: Tactic<A>>(T1, T2, std::marker::PhantomData<A>);
-impl<A: base::Action, T1: Tactic<A>, T2: Tactic<A>> Tactic<A> for Pipe<A, T1, T2> {
-    fn react(&self, point: &A::Point) -> Option<ActionChain<A>> {
-        let Self(t1, t2, _) = self;
-        if let Some(chain1) = t1.react(&point) {
-            if let Some(mut chain2) = t2.react(&chain1.start) {
-                chain2.actions.append(chain1.actions);
-                Some(chain2)
+    impl<A: base::Action, T1: Tactic<A>, T2: Tactic<A>> Tactic<A> for Pipe<A, T1, T2> {
+        fn react(&self, point: &A::Point) -> Option<ActionChain<A>> {
+            let Self(t1, t2, _) = self;
+            if let Some(chain1) = t1.react(&point) {
+                if let Some(mut chain2) = t2.react(&chain1.start) {
+                    chain2.actions.append(chain1.actions);
+                    Some(chain2)
+                } else {
+                    Some(chain1)
+                }
             } else {
-                Some(chain1)
+                t2.react(&point)
             }
-        } else {
-            t2.react(&point) 
         }
     }
-}
     Pipe(t1, t2, std::marker::PhantomData)
 }
 
-pub fn atomic_pipe<A: base::Action, T1: Tactic<A>, T2: Tactic<A>>(t1: T1, t2: T2) -> impl Tactic<A> {
+pub fn atomic_pipe<A: base::Action, T1: Tactic<A>, T2: Tactic<A>>(
+    t1: T1,
+    t2: T2,
+) -> impl Tactic<A> {
     struct Pipe<A: base::Action, T1: Tactic<A>, T2: Tactic<A>>(T1, T2, std::marker::PhantomData<A>);
-impl<A: base::Action, T1: Tactic<A>, T2: Tactic<A>> Tactic<A> for Pipe<A, T1, T2> {
-    fn react(&self, point: &A::Point) -> Option<ActionChain<A>> {
-        let Self(t1, t2, _) = self;
-        let chain1 = t1.react(&point)?;
-        let mut chain2 = t2.react(&chain1.start)?;
-        chain2.actions.append(chain1.actions);
-        Some(chain2)
+    impl<A: base::Action, T1: Tactic<A>, T2: Tactic<A>> Tactic<A> for Pipe<A, T1, T2> {
+        fn react(&self, point: &A::Point) -> Option<ActionChain<A>> {
+            let Self(t1, t2, _) = self;
+            let chain1 = t1.react(&point)?;
+            let mut chain2 = t2.react(&chain1.start)?;
+            chain2.actions.append(chain1.actions);
+            Some(chain2)
+        }
     }
-}
     Pipe(t1, t2, std::marker::PhantomData)
 }
 
