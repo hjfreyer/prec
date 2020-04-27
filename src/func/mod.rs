@@ -33,7 +33,7 @@ pub struct Arity {
     pub r#in: u32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tag {
     None,
     Alias(&'static str),
@@ -301,6 +301,7 @@ impl Func {
         fn stack_to_backwards_vec(func: &Func) -> StackHelper {
             match func.view() {
                 View::Empty(arity) => StackHelper {
+                    tag: Tag::None,
                     args: vec![],
                     arity_in: arity,
                 },
@@ -310,6 +311,7 @@ impl Func {
                     cdr_vec
                 }
                 _ => StackHelper {
+                    tag: Tag::None,
                     args: vec![func.clone()],
                     arity_in: func.arity().r#in,
                 },
@@ -321,10 +323,12 @@ impl Func {
             let g_res = stack_to_backwards_vec(&g);
             return Some((
                 StackHelper {
+                    tag: f.tag(),
                     args: f_res.args.into_iter().rev().collect(),
                     ..f_res
                 },
                 StackHelper {
+                    tag: g.tag(),
                     args: g_res.args.into_iter().rev().collect(),
                     ..g_res
                 },
@@ -334,6 +338,7 @@ impl Func {
     }
 }
 struct StackHelper {
+    tag: Tag,
     args: Vec<Func>,
     arity_in: u32,
 }
@@ -388,7 +393,7 @@ impl fmt::Debug for Func {
                 }
                 if let Some((fs, gs)) = func.as_application() {
                     // Special case for normal function application.
-                    if fs.args.len() == 1 && 0 < gs.args.len() {
+                    if fs.args.len() == 1 && 0 < gs.args.len() && gs.tag == Tag::None {
                         fmt.write_str("(")?;
                         write(&fs.args[0], fmt)?;
 
@@ -404,6 +409,10 @@ impl fmt::Debug for Func {
                     }
 
                     fn write_stack(sh: &StackHelper, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        if let Tag::Alias(name) = sh.tag {
+                            return fmt.write_fmt(format_args!("{}", name));
+                        }
+
                         if sh.args.len() == 0 {
                             return fmt.write_fmt(format_args!("!{}", sh.arity_in));
                         }
@@ -469,6 +478,22 @@ impl fmt::Debug for Func {
 
 #[macro_export]
 macro_rules! func {
+    (@stack $car:tt $($cdr:tt)+) => {
+        $crate::func::Func::stack(func![$car], func![@stack $($cdr)+]).unwrap()
+    };
+    (@stack $f:tt) => {
+        {
+            let f = func![$f];
+            let f_arity = f.arity();
+            $crate::func::Func::stack(f, $crate::func::Func::empty(f_arity.r#in)).unwrap()
+        }
+    };
+    (@compose_chain $f:tt) => {
+        func![$f]
+    };
+    (@compose_chain $f:tt $($gs:tt)+) => {
+        $crate::func::Func::comp(func![$f], func![@compose_chain $($gs)+]).unwrap()
+    };
     (Z) => {$crate::func::Func::z()};
     (S) => {$crate::func::Func::s()};
     ((int $value:tt)) => {$crate::func::Func::int($value)};
@@ -477,6 +502,21 @@ macro_rules! func {
     };
     ((proj $select:tt $arity:tt)) => {
         $crate::func::Func::proj($select, $arity).unwrap()
+    };
+    ((! $arity:expr)) => {
+        $crate::func::Func::empty($arity)
+    };
+    ((s_i $arity:expr)) => {
+        $crate::func::Func::s_eye($arity)
+    };
+    ((z_i $arity:expr)) => {
+        $crate::func::Func::z_eye($arity)
+    };
+    ([$($fs:tt),+]) => {
+        func![@stack $($fs)*]
+    };
+    (($f:tt $(*$gs:tt)+)) => {
+        func![@compose_chain $f $($gs)+]
     };
     ((const $arity:tt $f:tt)) => {
         $crate::func::Func::mk_const($arity, func![$f]).unwrap()

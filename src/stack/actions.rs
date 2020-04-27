@@ -10,6 +10,7 @@ use super::*;
 pub enum Action {
     PushRefl(Func),
     HorizontalConcat,
+    Swap,
     CarApply(pa::Action),
     CdrApply(Box<Action>),
 }
@@ -45,6 +46,11 @@ impl Action {
             Action::CdrApply(cdr_action) => {
                 let (car, cdr) = stack.snoc()?;
                 Some(cdr_action.act(cdr).ok()?.push(car))
+            }
+            Action::Swap => {
+                let (car, cdr) = stack.snoc()?;
+                let (car_cdr, cdr_cdr) = cdr.snoc()?;
+                Some(cdr_cdr.push(car).push(car_cdr))
             }
         }
     }

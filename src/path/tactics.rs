@@ -127,7 +127,6 @@ pub fn comp_left() -> impl base::Tactic<Action> {
     impl base::Tactic<Action> for Impl {
         fn react(&self, Path { start, end }: &Path) -> Option<base::ActionChain<Action>> {
             let ((start_f, start_g), (end_f, end_g)) = (start.decompose()?, end.decompose()?);
-            println!("{:?} vs {:?}", start_g, end_g);
             if start_g.syntax_eq(&end_g) {
                 Some(base::ActionChain {
                     start: Path {
@@ -135,6 +134,69 @@ pub fn comp_left() -> impl base::Tactic<Action> {
                         end: end_f,
                     },
                     actions: im::vector![Action::CompLeft(start_g)],
+                })
+            } else {
+                None
+            }
+        }
+    }
+    Impl()
+}
+
+pub fn comp_right() -> impl base::Tactic<Action> {
+    struct Impl();
+    impl base::Tactic<Action> for Impl {
+        fn react(&self, Path { start, end }: &Path) -> Option<base::ActionChain<Action>> {
+            let ((start_f, start_g), (end_f, end_g)) = (start.decompose()?, end.decompose()?);
+            if start_f.syntax_eq(&end_f) {
+                Some(base::ActionChain {
+                    start: Path {
+                        start: start_g,
+                        end: end_g,
+                    },
+                    actions: im::vector![Action::CompRight(start_f)],
+                })
+            } else {
+                None
+            }
+        }
+    }
+    Impl()
+}
+
+pub fn stack_car() -> impl base::Tactic<Action> {
+    struct Impl();
+    impl base::Tactic<Action> for Impl {
+        fn react(&self, Path { start, end }: &Path) -> Option<base::ActionChain<Action>> {
+            let ((start_car, start_cdr), (end_car, end_cdr)) = (start.unstack()?, end.unstack()?);
+            if start_cdr.syntax_eq(&end_cdr) {
+                Some(base::ActionChain {
+                    start: Path {
+                        start: start_car,
+                        end: end_car,
+                    },
+                    actions: im::vector![Action::StackCar(start_cdr)],
+                })
+            } else {
+                None
+            }
+        }
+    }
+    Impl()
+}
+
+pub fn stack_cdr() -> impl base::Tactic<Action> {
+    struct Impl();
+    impl base::Tactic<Action> for Impl {
+        fn react(&self, Path { start, end }: &Path) -> Option<base::ActionChain<Action>> {
+            let ((start_car, start_cdr), (end_car, end_cdr)) = (start.unstack()?, end.unstack()?);
+            if start_car.syntax_eq(&end_car) {
+                Some(base::ActionChain {
+                    start: Path {
+                        start: start_cdr,
+                        end: end_cdr,
+                    },
+                    actions: im::vector![Action::StackCdr(start_car)],
                 })
             } else {
                 None

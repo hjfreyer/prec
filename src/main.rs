@@ -45,23 +45,16 @@ fn main() {
         let plus_mod2 = (maybe_increment (not (is_even (proj 0 2))) (proj 1 2));
         let _half = (rec (int 0) (plus_mod2 (proj 1 2) (proj 0 2)));
     ];
-    //     //    println!("{:#?}", is_even);
-
-    //     //    let g = goal::HorizontalPath::new(func![(is_even double)], func![(const 1 (int 1))]);
-
-    //     //    let mut g = im::vector![Endpoints(_t4, func![(int 1)])];
 
     macro_rules! solve {
             ($a:expr, $b: expr; $($tactic:expr;)*) => {
                 {
                     let mut stack = Stack::Empty.push(path::Path{start: $a, end: $b});
-//                    let mut actions : im::Vector<tactics::StackAction>= im::Vector::new();
                     println!("{:?}", stack);
                     $(
                         {
                             let chain = $tactic.react(&stack).unwrap();
                             stack = chain.start;
-//                            actions.extend(new_actions);
                             println!("{:?}", stack);
                         }
                     )*
@@ -72,42 +65,149 @@ fn main() {
 
     // Proof that ed = 1
 
+    // let factored = func![((maybe_increment
+    //     (not (proj 0 2))
+    //     (maybe_increment
+    //         (proj 0 2)
+    //         (proj 1 2))) (not (is_even (_double (proj 0 1)))) (_half _double))
+    // ];
+    // let factored2 = func![((S
+    //         (proj 1 2)) (not (is_even (_double (proj 0 1)))) (_half _double))
+    // ];
+
     // let _stack = solve!(
-    //     func![(is_even _double)], func![(const 1 (int 1))];
-    //     stack::tactics::cut(&func![(rec (int 1) ((not not) (proj 0 2)))]);
+    //     func![(_half _double)], func![(proj 0 1)];
+    //     stack::tactics::cut(&func![(rec (int 0) (S (proj 0 2)))]);
     //     stack::tactics::induction();
-    //     stack::tactics::auto();
-    //     stack::tactics::auto();
-    //     stack::tactics::car(path::tactics::reverse());
-    //     stack::tactics::induction();
-    //     stack::tactics::auto();
-    //     stack::tactics::auto();
+    //     //stack::tactics::car(path::tactics::simplify());
+    //     // stack::tactics::auto();
+    //     stack::tactics::cut(&factored2);
+    //     stack::tactics::cut(&factored);
+    //     stack::tactics::turbo();
+    //     stack::tactics::car(path::tactics::comp_left());
+    //     stack::tactics::cut(&func![(rec (S (proj 0 1)) (S (proj 2 3)))]);
+    //     stack::tactics::turbo();
     // );
 
-    let factored = func![((maybe_increment
-        (not (proj 0 2))
-        (maybe_increment
-            (proj 0 2)
-            (proj 1 2))) (not (is_even (_double (proj 0 1)))) (_half _double))
+    func_let![
+        let _add = (rec (proj 0 1) (S (proj 0 3)));
+        let _const2 = ((int 2) * (!2));
+        let _swap = [(proj 1 2), (proj 0 2)];
     ];
-    let factored2 = func![((S
-            (proj 1 2)) (not (is_even (_double (proj 0 1)))) (_half _double))
+    //     // Proof that addition is commutataive.
+    //     solve!(
+    //             func![_add], func![ (_add * _swap)];
+    //             stack::tactics::induction();
+    //             stack::tactics::cut(&func![((S _add) * _swap)]);
+    //             stack::tactics::auto();
+    //             stack::tactics::car(path::tactics::reverse());
+    //             stack::tactics::cut(&func![((_add * _swap *(s_i 2) * _swap) * _swap)]);
+    //             stack::tactics::auto();
+    //             stack::tactics::car(path::tactics::reverse());
+    //             stack::tactics::car(path::tactics::comp_left());
+    //             stack::tactics::cut(&func![(rec S (S (proj 0 3)))]);
+    //             stack::tactics::turbo();
+    //             stack::tactics::cut(&func![(rec (int 0) (S (proj 0 2)))]);
+    //             stack::tactics::turbo();
+    //     );
+    //  println!("NEXT");
+
+    // Proof that addition is associative.
+    // solve!(
+    //     func![(_add (_add (proj 0 3) (proj 1 3)) (proj 2 3))],
+    //     func![(_add (proj 0 3) (_add (proj 1 3) (proj 2 3)))];
+    //     stack::tactics::cut(&func![(rec _add (S (proj 0 4)))]);
+    //     stack::tactics::turbo();
+    // );
+
+    func_let![
+        let _pred = (rec (int 0) (proj 1 2));
+        let _sub = (rec
+            (proj 0 1)
+            (_pred (proj 0 3))
+        );
+        let _eq_zero = (rec (int 1) (const 2 (int 0)));
+        let _bor = (rec (proj 0 1) (const 3 (int 1)));
     ];
 
-    let _stack = solve!(
-        func![(_half _double)], func![(proj 0 1)];
-        stack::tactics::cut(&func![(rec (int 0) (S (proj 0 2)))]);
+    // solve!(
+    //         func![_sub],
+    //         func![(_sub (S (proj 0 2)) (S (proj 1 2)))];
+    //         // stack::tactics::cut(&func![(rec (const 1 (int 1)) (proj 0 3))]);
+    //         // stack::tactics::cut(&func![(rec
+    //         //     (const 1 (int 1))
+    //         //     ((rec (const 1 (int 1)) (proj 0 3))
+    //         //         (proj 2 3)
+    //         //         (proj 1 3)
+    //         //     )
+    //         // )
+    //     //     // ]);
+    //         // stack::tactics::turbo();
+    //     //     stack::tactics::apply_and_cut(|f| func![((f * _swap) * _swap)]);
+    //     //     stack::tactics::auto();
+    //     //     stack::tactics::auto();
+    //     //     stack::tactics::car(path::tactics::comp_left());
+    //     //    stack::tactics::simplify();
+    //     //     stack::tactics::cut(&func![(rec (const 1 (int 1)) (proj 0 3))]);
+    //     //     stack::tactics::induction();
+    //     //    stack::tactics::simplify();
+    //     //     stack::tactics::apply_and_cut(|f| func![((f * _swap) * _swap)]);
+    //     //     stack::tactics::auto();
+    //     //     stack::tactics::auto();
+    //     //     stack::tactics::car(path::tactics::comp_left());
+    //     );
+    solve!(
+        func![((_bor (_eq_zero _sub) (_eq_zero * [_sub] * _swap)) * [(proj 0 2), _add])],
+        func![(const 2 (int 1))];
+        stack::tactics::cut(&func![(rec (const 1 (int 1)) (proj 0 3))]);
+        // stack::tactics::cut(&func![(rec
+        //     (const 1 (int 1))
+        //     ((rec (const 1 (int 1)) (proj 0 3))
+        //         (proj 2 3)
+        //         (proj 1 3)
+        //     )
+        // )
+    //     // ]);
         stack::tactics::induction();
-        //stack::tactics::car(path::tactics::simplify());
-        // stack::tactics::auto();
-        stack::tactics::cut(&factored2);
-        stack::tactics::cut(&factored);
-        stack::tactics::turbo();
-        stack::tactics::car(path::tactics::comp_left());
-        stack::tactics::cut(&func![(rec (S (proj 0 1)) (S (proj 2 3)))]);
-        stack::tactics::turbo();
+        stack::tactics::simplify();
+        stack::tactics::car(path::tactics::comp_right());
+        stack::tactics::stack_split();
+        stack::tactics::stack_split();
+        stack::tactics::refl();
+        stack::tactics::car(path::tactics::comp_right());
+        stack::tactics::car(path::tactics::stack_car());
+    //      stack::tactics::cut(&func![_sub]);
+    //     stack::tactics::induction();
+    //    stack::tactics::simplify();
+    //     stack::tactics::apply_and_cut(|f| func![((f * _swap) * _swap)]);
+    //     stack::tactics::auto();
+    //     stack::tactics::auto();
+    //    stack::tactics::simplify();
+    //     stack::tactics::cut(&func![(rec (const 1 (int 1)) (proj 0 3))]);
+    //     stack::tactics::induction();
+    //    stack::tactics::simplify();
+    //     stack::tactics::apply_and_cut(|f| func![((f * _swap) * _swap)]);
+    //     stack::tactics::auto();
+    //     stack::tactics::auto();
+    //     stack::tactics::car(path::tactics::comp_left());
     );
-    //     // Proof that (half double) = id
+
+    // solve!(
+    //       func![((_bor (_eq_zero _sub) (_eq_zero * [_sub] * _swap)) * [(S (proj 0 2)), (S (proj 1 2))]
+    //       )],
+    //     func![(const 2 (int 1))];
+    //     stack::tactics::simplify();
+    //     // stack::tactics::cut(&func![(rec (const 1 (int 1)) (proj 0 3))]);
+    //     // stack::tactics::induction();
+    //     // stack::tactics::apply_and_cut(|f| func![((f * _swap) * _swap)]);
+    //     // stack::tactics::auto();
+    //     // stack::tactics::auto();
+    //     // stack::tactics::car(path::tactics::comp_left());
+    //     // stack::tactics::cut(&func![(rec (const 1 (int 1)) (proj 0 3))]);
+    //     // stack::tactics::induction();
+    //     // stack::tactics::simplify();
+    // );
+
     //     //
     //     let (stack, actions) = solve!(
     //             tactics::cut(&func![(rec (int 0) (S (proj 0 2)))]);
