@@ -35,31 +35,8 @@ pub fn eta_abstract_bare_z_or_s() -> impl base::Tactic<Action> {
     }
     Impl()
 }
-// Rule::EtaAbstractBareS => {
-//     let (f, g) = func.decompose()?;
-//     f.unrec()?;
-//     let (g_car, g_cdr) = g.unstack()?;
-//     if let FView::S = g_car.view() {
-//         let eta_red = Rewrite::new(View::EtaReductionRight(Func::s()), func::Tag::None);
-//         let eta_abs = Rewrite::new(View::Reverse(eta_red), func::Tag::None);
-
-//         let g_rw = Rewrite::new(View::StackCar(eta_abs, g_cdr), g.tag());
-
-//         Some(View::CompRight(f, g_rw))
-//     } else {
-//         None
-//     }
-// }
 
 pub fn reduce_once() -> impl base::Tactic<Action> {
-    // struct Impl();
-    // impl base::Tactic<Action> for Impl {
-    //         fn react(&self, func: &Func) -> Option<base::ActionChain<Action>> {
-
-    //         }
-    // }
-    // Impl();
-
     tactic![
         (|| (RecursiveTactic(Action::ProjCar))(RecursiveTactic(Action::ProjCdr))(RecursiveTactic(
             Action::CompAssocRight
@@ -71,11 +48,6 @@ pub fn reduce_once() -> impl base::Tactic<Action> {
             eta_abstract_bare_z_or_s()
         )))
     ]
-    // star(tactics::pipe(
-    //     tactics::star(RecursiveTactic(Action::CompAssocRight)),
-    //     tactics::star(RecursiveTactic(Action::CompDistributeStack)),
-    //     tactics::star(RecursiveTactic(Action::CompDistributeEmpty)),
-    // ))
 }
 
 struct RecursiveTactic<T: base::Tactic<Action>>(T);
@@ -141,33 +113,6 @@ impl<T: base::Tactic<Action>> base::Tactic<Action> for RecursiveTactic<T> {
                 return Some(p);
             }
         }
-
-        // if let Some((car, cdr)) = end_func.unstack() {
-        //     let opt = None
-        //         .or_else(|| {
-        //             let rws = self.apply(&car)?;
-        //             Some(
-        //                 rws.into_iter()
-        //                     .map(|rw| {
-        //                         Rewrite::new(View::StackCar(rw, cdr.clone()), func::Tag::None)
-        //                     })
-        //                     .collect(),
-        //             )
-        //         })
-        //         .or_else(|| {
-        //             let rws = self.apply(&cdr)?;
-        //             Some(
-        //                 rws.into_iter()
-        //                     .map(|rw| {
-        //                         Rewrite::new(View::StackCdr(car.clone(), rw), func::Tag::None)
-        //                     })
-        //                     .collect(),
-        //             )
-        //         });
-        //     if let Some(p) = opt {
-        //         return Some(p);
-        //     }
-        // }
         None
     }
 }

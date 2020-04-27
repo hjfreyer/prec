@@ -472,10 +472,6 @@ impl fmt::Debug for Func {
     }
 }
 
-// impl TypedPoint for Func {
-//     type Type = Func;
-// }
-
 #[macro_export]
 macro_rules! func {
     (@stack $car:tt $($cdr:tt)+) => {

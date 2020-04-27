@@ -5,7 +5,6 @@ use crate::base::SyntaxEq;
 use crate::func::Func;
 use crate::path;
 use crate::path::actions as pa;
-use crate::tactics;
 
 pub fn refl() -> impl base::Tactic<Action> {
     struct Impl();
@@ -134,19 +133,6 @@ where
     Impl(f1)
 }
 
-// pub fn adapt_both_sides(f : F) -> impl base::Tactic<Action>
-// where F : Fn(&Func) -> Func {
-
-// // crate::tactic![
-// //     (&&
-// //         (cut(func1))
-// //         (cdr(cut(func2)))
-// //         (cdr(swap()))
-// //         (cdr(car(path::tactics::reverse())))
-// //     )
-// // ]
-// }
-
 pub fn double_cut(func1: &Func, func2: &Func) -> impl base::Tactic<Action> {
     crate::tactic![
         (&&(cut(func1))(cdr(cut(func2)))(cdr(swap()))(cdr(car(path::tactics::reverse()))))
@@ -186,7 +172,7 @@ pub fn stack_split() -> impl base::Tactic<Action> {
     impl base::Tactic<Action> for Cut {
         fn react(&self, stack: &Stack) -> Option<base::ActionChain<Action>> {
             let path::Path { start, end } = stack.head()?;
-            let ((start_car, start_cdr), (end_car, end_cdr)) = (start.unstack()?, end.unstack()?);
+            let ((start_car, _start_cdr), (_end_car, end_cdr)) = (start.unstack()?, end.unstack()?);
             let mid = Func::stack(start_car, end_cdr).unwrap();
             apply_cut(&mid, stack)
         }

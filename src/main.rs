@@ -3,26 +3,9 @@ pub mod base;
 pub mod func;
 pub mod path;
 pub mod stack;
-// mod func_manipulation;
-// mod metapath;
-// mod path;
-// mod pattern;
-// mod rewrite;
 pub mod tactics;
-// use crate::base::{Endpoints, SyntaxEq};
-// use crate::func::{Func, View};
-// // use crate::rewrite::factory::Factory;
-// use crate::rewrite::Rewrite;
-// use im;
-// use im::vector::Vector;
-// use tactics::Tactic;
 use base::Tactic;
 use stack::Stack;
-// fn advance<M: tactics::Tactic>(g: tactics::Stack, m: M) -> tactics::Stack {
-//     let g = m.apply(&g).unwrap().0;
-//     println!("{:?}", g);
-//     g
-// }
 
 fn main() {
     func_let![
